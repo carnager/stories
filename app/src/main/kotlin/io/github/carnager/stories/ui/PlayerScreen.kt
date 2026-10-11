@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -80,6 +81,19 @@ private val grounds = HashMap<String, Ground>()
 
 @Composable
 private fun groundFor(book: Book?): Ground {
+    // No picture: the made-up cover's colour, so the player is as dark as with one.
+    val madeUp = book?.takeIf { it.cover == null }?.let { madeCoverColours(it.title) }
+    if (madeUp != null) {
+        val hsl = FloatArray(3).also { ColorUtils.colorToHSL(madeUp.first.toArgb(), it) }
+        val text = Color(0xFFF6F1E9)
+        return Ground(
+            top = Color(ColorUtils.HSLToColor(hsl.copyOf().also { it[2] = 0.22f })),
+            bottom = Color(ColorUtils.HSLToColor(hsl.copyOf().also { it[2] = 0.08f })),
+            accent = madeUp.second,
+            text = text,
+            soft = text.copy(alpha = 0.68f),
+        )
+    }
     val fallback = Ground(
         top = MaterialTheme.colorScheme.surfaceContainerHigh,
         bottom = MaterialTheme.colorScheme.surface,
@@ -209,7 +223,7 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
                 Spacer(Modifier.height(18.dp))
                 ChapterBar(app, book, position, chapterIndex, accent, text, ground.soft)
                 Spacer(Modifier.height(6.dp))
-                Transport(app, state.playing, settings.rewindSeconds, settings.forwardSeconds, accent, text, bottom)
+                Transport(app, state.playing, settings.rewindSeconds, settings.forwardSeconds, settings.outerSkipSeconds, accent, text, bottom)
                 Spacer(Modifier.height(14.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Chip(Icons.Default.Speed, speedLabel(state.speed), state.speed != 1f, accent, ground.soft) { sheet = "speed" }
@@ -257,29 +271,39 @@ private fun ChapterBar(app: App, book: Book, position: Long, chapterIndex: Int, 
             dragging = null
         },
     )
-    Row(Modifier.fillMaxWidth()) {
+    // One bar, the chapter's: precise to aim in. The whole book is told in words beneath it.
+    // A book of one chapter: the bar is the book's, and the line below says it all.
+    if (book.chapters.size > 1) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(clock((fraction * length).toLong()), style = MaterialTheme.typography.labelMedium, color = soft)
-        Spacer(Modifier.weight(1f))
+        Text(
+            "Chapter ${chapterIndex + 1} of ${book.chapters.size}",
+            style = MaterialTheme.typography.labelMedium, color = soft, textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
         Text("-" + clock(((1 - fraction) * length / speed).toLong()), style = MaterialTheme.typography.labelMedium, color = soft)
     }
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(if (book.chapters.size > 1) 12.dp else 4.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("${clock(position)} of ${clock(book.durationMs)}", style = MaterialTheme.typography.labelMedium, color = soft)
         Text(
-            if (book.chapters.size > 1) "Chapter ${chapterIndex + 1} of ${book.chapters.size}" else "${(position * 100 / book.durationMs.coerceAtLeast(1))}% of the book",
-            style = MaterialTheme.typography.labelMedium, color = soft,
+            "${(position * 100 / book.durationMs.coerceAtLeast(1))}%",
+            style = MaterialTheme.typography.labelLarge, color = text, textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.weight(1f))
-        Text("${span(((book.durationMs - position) / speed).toLong())} left", style = MaterialTheme.typography.labelMedium, color = soft)
+        Text("${clock(((book.durationMs - position) / speed).toLong())} left", style = MaterialTheme.typography.labelMedium, color = soft)
     }
-    Spacer(Modifier.height(6.dp))
-    ProgressLine(position.toFloat() / book.durationMs.coerceAtLeast(1), color = text.copy(alpha = 0.55f), track = text.copy(alpha = 0.1f), height = 2.dp)
 }
 
 @Composable
-private fun Transport(app: App, playing: Boolean, back: Int, ahead: Int, accent: Color, text: Color, ground: Color) {
+private fun Transport(app: App, playing: Boolean, back: Int, ahead: Int, outer: Int, accent: Color, text: Color, ground: Color) {
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = app.playback::previousChapter, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Default.SkipPrevious, "Previous chapter", Modifier.size(30.dp), tint = text.copy(alpha = 0.8f))
+        // The outer pair: chapters, or a longer jump when set so.
+        if (outer > 0) {
+            SkipButton(outer, forward = false, tint = text.copy(alpha = 0.8f), small = true, onClick = app.playback::outerBack)
+        } else {
+            IconButton(onClick = app.playback::previousChapter, modifier = Modifier.size(52.dp)) {
+                Icon(Icons.Default.SkipPrevious, "Previous chapter", Modifier.size(30.dp), tint = text.copy(alpha = 0.8f))
+            }
         }
         SkipButton(back, forward = false, tint = text, onClick = app.playback::rewind)
         Box(
@@ -294,20 +318,24 @@ private fun Transport(app: App, playing: Boolean, back: Int, ahead: Int, accent:
             Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(40.dp), tint = ground)
         }
         SkipButton(ahead, forward = true, tint = text, onClick = app.playback::forward)
-        IconButton(onClick = app.playback::nextChapter, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Default.SkipNext, "Next chapter", Modifier.size(30.dp), tint = text.copy(alpha = 0.8f))
+        if (outer > 0) {
+            SkipButton(outer, forward = true, tint = text.copy(alpha = 0.8f), small = true, onClick = app.playback::outerForward)
+        } else {
+            IconButton(onClick = app.playback::nextChapter, modifier = Modifier.size(52.dp)) {
+                Icon(Icons.Default.SkipNext, "Next chapter", Modifier.size(30.dp), tint = text.copy(alpha = 0.8f))
+            }
         }
     }
 }
 
 /** A circling arrow with its seconds inside: drawn, so any number fits. */
 @Composable
-private fun SkipButton(seconds: Int, forward: Boolean, tint: Color, onClick: () -> Unit) {
+private fun SkipButton(seconds: Int, forward: Boolean, tint: Color, small: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.size(60.dp).clip(CircleShape).clickable(onClick = onClick),
+        Modifier.size(if (small) 52.dp else 60.dp).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.Canvas(Modifier.size(40.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.size(if (small) 34.dp else 40.dp)) {
             val stroke = 2.4.dp.toPx()
             val inset = stroke / 2 + 2.dp.toPx()
             val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
@@ -330,7 +358,7 @@ private fun SkipButton(seconds: Int, forward: Boolean, tint: Color, onClick: () 
             }
             drawPath(path, tint)
         }
-        Text("$seconds", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Manrope, color = tint)
+        Text(shortSpan(seconds), fontSize = if (small) 10.sp else 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Manrope, color = tint)
     }
 }
 
@@ -340,7 +368,7 @@ private fun Chip(icon: ImageVector, label: String, active: Boolean, accent: Colo
         Modifier
             .widthIn(min = 92.dp)
             .clip(RoundedCornerShape(50))
-            .background(if (active) accent.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.07f))
+            .background(if (active) accent.copy(alpha = 0.2f) else soft.copy(alpha = 0.12f))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -9,6 +9,8 @@ data class Settings(
     val roots: List<String> = emptyList(),
     val rewindSeconds: Int = 15,
     val forwardSeconds: Int = 30,
+    /** What the outer buttons skip: 0 for a chapter, else seconds. */
+    val outerSkipSeconds: Int = 0,
     val smartRewind: Boolean = true,
     val skipSilence: Boolean = false,
     val shakeToExtend: Boolean = true,
@@ -29,6 +31,7 @@ class SettingsStore(context: Context) {
         roots = prefs.getString("roots", "")!!.split('\n').filter { it.isNotBlank() },
         rewindSeconds = prefs.getInt("rewind", 15),
         forwardSeconds = prefs.getInt("forward", 30),
+        outerSkipSeconds = prefs.getInt("outer", 0),
         smartRewind = prefs.getBoolean("smartRewind", true),
         skipSilence = prefs.getBoolean("skipSilence", false),
         shakeToExtend = prefs.getBoolean("shake", true),
@@ -45,6 +48,7 @@ class SettingsStore(context: Context) {
             .putString("roots", s.roots.joinToString("\n"))
             .putInt("rewind", s.rewindSeconds)
             .putInt("forward", s.forwardSeconds)
+            .putInt("outer", s.outerSkipSeconds)
             .putBoolean("smartRewind", s.smartRewind)
             .putBoolean("skipSilence", s.skipSilence)
             .putBoolean("shake", s.shakeToExtend)

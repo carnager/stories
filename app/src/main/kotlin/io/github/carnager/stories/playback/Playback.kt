@@ -245,6 +245,10 @@ class Playback(
     fun rewind() = skip(-settings.value.rewindSeconds * 1000L)
     fun forward() = skip(settings.value.forwardSeconds * 1000L)
 
+    /** The outer buttons: a chapter, or as many seconds as set. */
+    fun outerBack() = settings.value.outerSkipSeconds.let { if (it > 0) skip(-it * 1000L) else previousChapter() }
+    fun outerForward() = settings.value.outerSkipSeconds.let { if (it > 0) skip(it * 1000L) else nextChapter() }
+
     fun nextChapter() {
         val b = book ?: return
         val next = b.chapters.getOrNull(b.chapterAt(position()) + 1) ?: return

@@ -110,9 +110,12 @@ private val coverHues = listOf(
     Color(0xFF6A5530) to Color(0xFFF1E0B6), Color(0xFF33584A) to Color(0xFFCDE8DB),
 )
 
+/** A made-up cover's two colours, ground and ink: the same for the same title, everywhere. */
+fun madeCoverColours(title: String): Pair<Color, Color> = coverHues[(title.hashCode() and 0x7fffffff) % coverHues.size]
+
 @Composable
 private fun MadeCover(title: String, author: String, side: Dp) {
-    val (ground, ink) = coverHues[(title.hashCode() and 0x7fffffff) % coverHues.size]
+    val (ground, ink) = madeCoverColours(title)
     val small = side < 90.dp
     Box(
         Modifier

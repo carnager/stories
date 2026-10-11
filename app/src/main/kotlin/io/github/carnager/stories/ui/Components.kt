@@ -192,3 +192,17 @@ fun bookFor(app: io.github.carnager.stories.App, id: String?): io.github.carnage
     val books by app.library.books.collectAsState()
     return remember(books, id) { app.library.book(id) }
 }
+
+/** A skip's length on its button: "30", "2m", "1:30". */
+fun shortSpan(seconds: Int): String = when {
+    seconds < 60 -> "$seconds"
+    seconds % 60 == 0 -> "${seconds / 60}m"
+    else -> "%d:%02d".format(seconds / 60, seconds % 60)
+}
+
+/** A skip's length in words: "15 s", "2 min", "1 min 30 s". */
+fun skipLabel(seconds: Int): String = when {
+    seconds < 60 -> "$seconds s"
+    seconds % 60 == 0 -> "${seconds / 60} min"
+    else -> "${seconds / 60} min ${seconds % 60} s"
+}
