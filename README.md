@@ -32,6 +32,11 @@ An audiobook player for Android, for libraries kept in folders.
   and car controls that skip seconds rather than files.
 
 Books are read straight from storage, so it asks for all-files access.
+Android 11 or newer.
+
+## License
+
+GPL-3.0; see LICENSE. The Manrope font is under the SIL Open Font License.
 
 ## Building
 
