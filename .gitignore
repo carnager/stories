@@ -1,0 +1,15 @@
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+
+# Signing material never belongs in the repository; see SIGNING.md.
+*.jks
+*.keystore
+*.p12
+signing.properties
+stories.properties
+
+# A sample from Smart AudioBook Player; the tests keep their own copy.
+/position.sabp.dat*

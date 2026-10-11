@@ -1,0 +1,31 @@
+# Stories
+
+An audiobook player for Android, for libraries kept in folders.
+
+- **Folders are books.** Every folder with audio in it is a book; a folder of
+  such folders is a series. Tags refine it: disc folders (`CD1`, `CD2`, or
+  tagged disc numbers) join into one book, a folder holding two albums
+  splits, and loose `.m4b` files are books of their own.
+- **Known by their covers.** Grids of covers, each marked with how far it's
+  heard: a dot while new, a bar while listening, a tick when finished. A
+  series shows its covers stacked and how many are done.
+- **Remembers every book** on its own: where, at what speed, whether finished.
+  A book that is moved or renamed keeps its place (found by its files).
+- **Chapters** from MP4 (Nero `chpl` and QuickTime chapter tracks) and ID3
+  `CHAP` frames; otherwise each file is a chapter.
+- **Smart AudioBook Player** positions are taken over: the
+  `position.sabp.dat` it leaves in each book folder is read on every scan,
+  and a newer one wins, so both apps can be used side by side.
+- Step back after a pause, per-book speed, sleep timer with fade-out and
+  shake to start it over, bookmarks, skip silence, lock screen, headphones
+  and car controls that skip seconds rather than files.
+
+Books are read straight from storage, so it asks for all-files access.
+
+## Building
+
+```sh
+./gradlew assembleDebug          # app/build/outputs/apk/debug
+./gradlew testDebugUnitTest
+./gradlew assembleRelease        # see SIGNING.md
+```
