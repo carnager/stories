@@ -38,7 +38,22 @@ data class Book(
     val tracks: List<Track>,
     val cover: String?,
     val fingerprint: String,
+    /** How the grouping named it (folder#key), which hand-made corrections refer to. */
+    val draft: String = "",
+    /** Details set by hand stand over the tags'. */
+    val edited: Boolean = false,
 ) {
+    private val key: String get() = draft.substringAfter('#', "")
+
+    /** Joined by hand from other books. */
+    val joined: Boolean get() = key.startsWith("merge:")
+
+    /** Joined on its own, from disc folders. */
+    val fromDiscs: Boolean get() = !joined && tracks.map { it.path.substringBeforeLast('/') }.distinct().size > 1
+
+    /** One file of a book that was cut into one per file, or a loose file. */
+    val single: Boolean get() = key.startsWith("file:")
+
     val durationMs: Long = tracks.sumOf { it.durationMs.coerceAtLeast(0) }
 
     /** Where each file starts on the book's clock. */
@@ -113,3 +128,12 @@ fun Progress?.status(): Status = when {
 }
 
 data class Bookmark(val id: Long, val bookId: String, val positionMs: Long, val note: String, val created: Long)
+
+/** The book with details set by hand over its own. */
+fun Book.with(edit: Edit?): Book = if (edit == null) this else copy(
+    title = edit.title ?: title,
+    author = edit.author ?: author,
+    narrator = edit.narrator ?: narrator,
+    series = edit.series ?: series,
+    edited = true,
+)

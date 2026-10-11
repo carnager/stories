@@ -37,6 +37,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import io.github.carnager.stories.App
 import io.github.carnager.stories.data.Status
 import io.github.carnager.stories.data.status
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,23 +142,30 @@ fun SleepSheet(app: App, onDismiss: () -> Unit) {
     }
 }
 
-/** Said, briefly, after a bookmark is set. */
+/** After a bookmark is set: where it is, and a line to say why, if wanted. */
 @Composable
-fun MarkedSheet(app: App, onDismiss: () -> Unit) {
+fun MarkedSheet(app: App, id: Long, onDismiss: () -> Unit) {
     val book = app.playback.book ?: return onDismiss()
     val marks by app.library.bookmarks.collectAsState()
-    val mine = marks.filter { it.bookId == book.id }.sortedBy { it.positionMs }
-    LaunchedEffect(Unit) { delay(4000); onDismiss() }
-    Sheet(onDismiss) {
-        SheetTitle("Bookmarked", "${mine.size} in this book · listed on its page")
-        mine.takeLast(4).forEach { mark ->
-            Row(
-                Modifier.fillMaxWidth().clickable { app.playback.seekTo(mark.positionMs); onDismiss() }.padding(horizontal = 24.dp, vertical = 10.dp),
-            ) {
-                Text(book.chapters.getOrNull(book.chapterAt(mark.positionMs))?.title.orEmpty(), style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(clock(mark.positionMs), style = MaterialTheme.typography.bodySmall, color = LocalTones.current.muted)
-            }
+    val mark = marks.firstOrNull { it.id == id } ?: return onDismiss()
+    var note by remember { mutableStateOf(mark.note) }
+    val save = { app.library.noteBookmark(id, note); onDismiss() }
+    Sheet(save) {
+        SheetTitle(
+            "Bookmarked at ${clock(mark.positionMs)}",
+            book.chapters.getOrNull(book.chapterAt(mark.positionMs))?.title?.takeIf { it.isNotBlank() } ?: book.title,
+        )
+        androidx.compose.material3.OutlinedTextField(
+            note, { note = it },
+            placeholder = { Text("A note, if you like") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
+        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
+            androidx.compose.material3.TextButton(onClick = { app.library.removeBookmark(id); onDismiss() }) { Text("Remove") }
+            androidx.compose.material3.TextButton(onClick = save) { Text("Done") }
         }
     }
 }
@@ -184,6 +193,7 @@ fun HoldSheet(app: App, nav: Nav, hold: Hold, onDismiss: () -> Unit) {
                 if (status != Status.Finished) ActionRow(Icons.Default.Check, "Mark as finished") { app.library.markFinished(listOf(book), true); onDismiss() }
                 if (status != Status.New) ActionRow(Icons.Default.RestartAlt, "Mark as new") { app.library.markFinished(listOf(book), false); onDismiss() }
                 ActionRow(Icons.Default.Info, "Details and chapters") { nav.book = book.id; onDismiss() }
+                ActionRow(Icons.Default.Add, "Join with other books…") { onDismiss(); startJoining(app, nav, book) }
             }
             is Hold.OnFolder -> {
                 val books = hold.entry.books

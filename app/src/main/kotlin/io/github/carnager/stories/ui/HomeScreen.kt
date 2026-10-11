@@ -56,7 +56,7 @@ fun HomeScreen(app: App, nav: Nav) {
         books.filter { progress[it.id].status() == Status.Listening }.sortedByDescending { progress[it.id]?.lastPlayed ?: 0 }
     }
     // The book in the player, or else the one heard last: either way, one tap goes on with it.
-    val current = app.library.book(state.bookId) ?: listening.firstOrNull()
+    val current = bookFor(app, state.bookId) ?: listening.firstOrNull()
     val going = remember(listening, current) { listening.filter { it.id != current?.id } }
     val finished = remember(books, progress) {
         books.filter { progress[it.id].status() == Status.Finished }.sortedByDescending { progress[it.id]?.lastPlayed ?: 0 }.take(12)

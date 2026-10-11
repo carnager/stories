@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -48,12 +49,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import io.github.carnager.stories.App
+import io.github.carnager.stories.data.Book
 import io.github.carnager.stories.data.NaturalOrder
 import io.github.carnager.stories.data.Status
 import io.github.carnager.stories.data.status
 import java.text.Normalizer
 
 private enum class Order(val label: String) { Title("Title"), Author("Author"), Recent("Last heard"), Length("Length") }
+
+/** Books under headings: who wrote them, which series, who reads them. */
+private enum class Group(val label: String, val of: (Book) -> String) {
+    None("Nothing", { "" }),
+    Author("Author", { it.author }),
+    Series("Series", { it.series }),
+    Narrator("Reader", { it.narrator }),
+}
 
 /** Every book, wherever it lives: to find one by name, or by what's left to hear. */
 @Composable
@@ -65,6 +75,7 @@ fun BooksScreen(app: App, nav: Nav) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf<Status?>(null) }
     var order by rememberSaveable { mutableStateOf(Order.Title) }
+    var group by rememberSaveable { mutableStateOf(Group.None) }
     var sorting by remember { mutableStateOf(false) }
 
     val shown = remember(books, progress, query, filter, order) {
@@ -82,7 +93,7 @@ fun BooksScreen(app: App, nav: Nav) {
             .let { list ->
                 when (order) {
                     Order.Title -> list.sortedWith { a, b -> NaturalOrder.compare(a.title, b.title) }
-                    Order.Author -> list.sortedWith(compareBy<io.github.carnager.stories.data.Book> { it.author.ifEmpty { "￿" }.lowercase() }
+                    Order.Author -> list.sortedWith(compareBy<Book> { it.author.ifEmpty { "￿" }.lowercase() }
                         .thenComparator { a, b -> NaturalOrder.compare(a.series + a.folder, b.series + b.folder) })
                     Order.Recent -> list.sortedByDescending { progress[it.id]?.lastPlayed ?: 0 }
                     Order.Length -> list.sortedBy { it.durationMs }
@@ -90,16 +101,33 @@ fun BooksScreen(app: App, nav: Nav) {
             }
     }
 
+    // Named groups by name, with the books that have none at the end.
+    val sections = remember(shown, group) {
+        if (group == Group.None) listOf("" to shown)
+        else shown.groupBy { group.of(it).trim() }.toList()
+            .sortedWith { a, b -> if (a.first.isEmpty() != b.first.isEmpty()) (if (a.first.isEmpty()) 1 else -1) else NaturalOrder.compare(a.first, b.first) }
+            .map { (name, books) -> name.ifEmpty { "No ${group.label.lowercase()}" } to books }
+    }
+
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("Books", "${shown.size} of ${books.size}") {
             Box {
                 IconButton(onClick = { sorting = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Order", tint = LocalTones.current.secondary) }
                 DropdownMenu(expanded = sorting, onDismissRequest = { sorting = false }) {
+                    Text("Order", style = MaterialTheme.typography.labelMedium, color = LocalTones.current.muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     Order.entries.forEach { o ->
                         DropdownMenuItem(
                             text = { Text(o.label) },
                             trailingIcon = { if (o == order) Icon(Icons.Default.Check, null) },
                             onClick = { order = o; sorting = false },
+                        )
+                    }
+                    Text("Under headings by", style = MaterialTheme.typography.labelMedium, color = LocalTones.current.muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    Group.entries.forEach { g ->
+                        DropdownMenuItem(
+                            text = { Text(g.label) },
+                            trailingIcon = { if (g == group) Icon(Icons.Default.Check, null) },
+                            onClick = { group = g; sorting = false },
                         )
                     }
                 }
@@ -124,14 +152,20 @@ fun BooksScreen(app: App, nav: Nav) {
                 contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(shown, key = { it.id }) { book ->
-                    BookTile(book, book.title, progress[book.id], book.id == state.bookId, { nav.book = book.id }, { nav.holding = Hold.OnBook(book) })
+                sections.forEach { (heading, books) ->
+                    if (heading.isNotEmpty()) item(key = "h:$heading", span = { GridItemSpan(maxLineSpan) }) { Heading(heading, books.size) }
+                    items(books, key = { it.id }) { book ->
+                        BookTile(book, book.title, progress[book.id], book.id == state.bookId, { nav.book = book.id }, { nav.holding = Hold.OnBook(book) })
+                    }
                 }
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(shown, key = { it.id }) { book ->
-                    BookRow(book, book.title, progress[book.id], book.id == state.bookId, { nav.book = book.id }, { nav.holding = Hold.OnBook(book) })
+                sections.forEach { (heading, books) ->
+                    if (heading.isNotEmpty()) item(key = "h:$heading") { Heading(heading, books.size, inset = 20) }
+                    items(books, key = { it.id }) { book ->
+                        BookRow(book, book.title, progress[book.id], book.id == state.bookId, { nav.book = book.id }, { nav.holding = Hold.OnBook(book) })
+                    }
                 }
             }
         }
@@ -182,4 +216,13 @@ fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
+}
+
+@Composable
+private fun Heading(name: String, count: Int, inset: Int = 8) {
+    Row(Modifier.fillMaxWidth().padding(start = inset.dp, end = inset.dp, top = 18.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
+        Text(name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text("$count", style = MaterialTheme.typography.labelMedium, color = LocalTones.current.muted)
+    }
 }

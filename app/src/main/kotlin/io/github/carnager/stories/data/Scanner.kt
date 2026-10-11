@@ -23,7 +23,7 @@ class Scanner(private val dir: File) {
 
     data class Progress(val done: Int, val total: Int)
 
-    suspend fun scan(roots: List<String>, onProgress: (Progress) -> Unit): List<Book> = withContext(Dispatchers.IO) {
+    suspend fun scan(roots: List<String>, overrides: Overrides, onProgress: (Progress) -> Unit): List<Book> = withContext(Dispatchers.IO) {
         val cache = loadCache()
         val walked = roots.flatMap { root -> walk(File(root)) }
         val found = walked.filter { it.extension.lowercase() in audio }
@@ -55,7 +55,7 @@ class Scanner(private val dir: File) {
         val cued = HashMap<String, List<Mark>>()
         sheets.forEach { sheet -> cued += Cue.match(Cue.read(sheet), audioByDir[sheet.parent].orEmpty()) }
         val tags = found.mapNotNull { f -> cache[f.path]?.let { t -> cued[f.path]?.let { t.copy(marks = it) } ?: t } }
-        build(roots, Grouping.group(tags))
+        build(roots, Grouping.group(tags, overrides)).map { it.with(overrides.edits[it.id]) }
     }
 
     private fun walk(root: File): List<File> {
@@ -104,8 +104,12 @@ class Scanner(private val dir: File) {
         return drafts.map { draft ->
             val folderName = draft.folder.substringAfterLast('/')
             val parent = draft.folder.substringBeforeLast('/')
-            val id = Grouping.hash(draft.folder + "#" + draft.key)
-            val series = if (parent !in rootSet && (booksPerParent[parent] ?: 0) >= 2 && draft.folder !in rootSet) parent.substringAfterLast('/') else ""
+            val id = Grouping.hash(draft.id)
+            // A book joined by hand sits in the series folder itself, beside the series' other books.
+            val joined = draft.key.startsWith("merge:")
+            val home = if (joined) draft.folder else parent
+            val beside = (booksPerParent[home] ?: 0) + if (joined) drafts.count { it.folder == home } else 0
+            val series = if (home !in rootSet && beside >= 2 && (joined || draft.folder !in rootSet)) home.substringAfterLast('/') else ""
             Book(
                 id = id,
                 folder = draft.folder,
@@ -119,6 +123,7 @@ class Scanner(private val dir: File) {
                 },
                 cover = cover(id, draft),
                 fingerprint = Grouping.fingerprint(draft.files),
+                draft = draft.id,
             )
         }
     }

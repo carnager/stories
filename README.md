@@ -9,6 +9,10 @@ An audiobook player for Android, for libraries kept in folders.
 - **Known by their covers.** Grids of covers, each marked with how far it's
   heard: a dot while new, a bar while listening, a tick when finished. A
   series shows its covers stacked and how many are done.
+- **Put right by hand** when the folders or tags don't say it: join books
+  into one, make each file of a folder a book, keep disc folders apart, and
+  edit title, author, reader and series. Kept by the app, never written to
+  the files, and undone the same way; a book's place follows it through.
 - **Remembers every book** on its own: where, at what speed, whether finished.
   A book that is moved or renamed keeps its place (found by its files).
 - **Chapters** from MP4 (Nero `chpl` and QuickTime chapter tracks) and ID3
@@ -23,7 +27,8 @@ An audiobook player for Android, for libraries kept in folders.
 - **Android Auto**: the books being heard and the folders, to browse in the car.
 - **Widget**: the book being heard on the home screen, with back and play.
 - Step back after a pause, per-book speed, sleep timer with fade-out and
-  shake to start it over, bookmarks, skip silence, lock screen, headphones
+  shake to start it over, bookmarks with notes, books under headings by author, series or reader,
+  skip silence, lock screen, headphones
   and car controls that skip seconds rather than files.
 
 Books are read straight from storage, so it asks for all-files access.

@@ -56,45 +56,136 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
 
     fun book(id: String?): Book? = id?.let { byId[it] }
 
+    private val _overrides = MutableStateFlow(store.loadOverrides())
+    @Volatile private var again = false
+
+    /** Looks through the folders again; asked while looking, it looks once more after. */
     fun rescan() {
-        if (scanJob?.isActive == true) return
+        if (scanJob?.isActive == true) { again = true; return }
         scanJob = scope.launch(Dispatchers.IO) {
             _scanning.value = Scanner.Progress(0, 0)
             try {
-                val roots = settings.value.roots
-                val found = scanner.scan(roots) { _scanning.value = it }
-                    .sortedWith { a, b -> NaturalOrder.compare(a.folder + "/" + a.title, b.folder + "/" + b.title) }
-                adoptMoved(found)
-                importFolderPositions(found)
-                index = FolderIndex(found, roots)
-                byId = found.associateBy { it.id }
-                _books.value = found
-                store.saveLibrary(found)
+                do {
+                    again = false
+                    val roots = settings.value.roots
+                    val before = byId
+                    val found = scanner.scan(roots, _overrides.value) { _scanning.value = it }
+                        .sortedWith { a, b -> NaturalOrder.compare(a.folder + "/" + a.title, b.folder + "/" + b.title) }
+                    val moved = adoptMoved(found, before)
+                    importFolderPositions(found)
+                    index = FolderIndex(found, roots)
+                    byId = found.associateBy { it.id }
+                    _books.value = found
+                    store.saveLibrary(found)
+                    if (moved.isNotEmpty()) _replaced.tryEmit(moved)
+                } while (again)
             } finally {
                 _scanning.value = null
             }
         }
     }
 
-    /** Progress of a book that moved or was renamed follows it, found by its files. */
-    private fun adoptMoved(found: List<Book>) {
+    /**
+     * Progress of books that changed shape follows them, by their files: a
+     * book moved or renamed (the same files), books joined into one (to the
+     * place in the file last heard), a book cut apart (the pieces before the
+     * place finished, the piece holding it at that place). Old entries stay,
+     * in case their folder comes back -- a card taken out, say.
+     */
+    private fun adoptMoved(found: List<Book>, before: Map<String, Book>): Set<String> {
         val ids = found.mapTo(HashSet()) { it.id }
         val byPrint = found.groupBy { it.fingerprint }
-        var changed = false
-        _progress.update { all ->
-            val result = all.toMutableMap()
-            for ((id, p) in all) {
-                if (id in ids) continue
-                val match = byPrint[p.fingerprint]?.singleOrNull() ?: continue
-                if (match.id in result) continue
-                result.remove(id)
-                result[match.id] = p.copy(bookId = match.id)
-                changed = true
-            }
-            result
+        val byPath = HashMap<String, Book>().apply { found.forEach { b -> b.tracks.forEach { put(it.path, b) } } }
+        val all = _progress.value
+        val adopted = HashMap<String, Progress>()
+        fun offer(p: Progress?) {
+            if (p == null) return
+            val known = adopted[p.bookId] ?: all[p.bookId]
+            if (known == null || known.lastPlayed < p.lastPlayed) adopted[p.bookId] = p
         }
-        if (changed) persistProgress()
+        fun done(b: Book, from: Progress) = Progress(
+            b.id, b.fingerprint, b.tracks.lastIndex, b.tracks.lastOrNull()?.durationMs ?: 0, b.durationMs, b.durationMs,
+            true, from.speed, from.lastPlayed,
+        )
+        for ((id, p) in all) {
+            if (id in ids) continue
+            byPrint[p.fingerprint]?.singleOrNull()?.let { offer(p.copy(bookId = it.id)); continue }
+            val old = before[id] ?: continue
+            val oldPaths = old.tracks.map { it.path }
+            val oldSet = oldPaths.toHashSet()
+            val pieces = found.filter { b -> b.tracks.isNotEmpty() && b.tracks.all { it.path in oldSet } }
+            for (b in pieces) {
+                val at = b.tracks.map { oldPaths.indexOf(it.path) }
+                when {
+                    p.finished || at.max() < p.trackIndex -> offer(done(b, p))
+                    p.trackIndex in at -> offer(placeAt(b, oldPaths[p.trackIndex].substringAfterLast('/'), p.trackPositionMs, false, p.speed, p.lastPlayed))
+                }
+            }
+            // Joined into a bigger book: the place in the file, or the end of the last file once finished.
+            val file = if (p.finished) oldPaths.lastOrNull() else oldPaths.getOrNull(p.trackIndex)
+            val target = file?.let(byPath::get)?.takeIf { it !in pieces } ?: continue
+            val fileMs = if (p.finished) old.tracks.last().durationMs else p.trackPositionMs
+            offer(placeAt(target, file.substringAfterLast('/'), fileMs, false, p.speed, p.lastPlayed))
+        }
+        if (adopted.isEmpty()) return emptySet()
+        _progress.update { it + adopted }
+        persistProgress()
+        return adopted.keys
     }
+
+    // --- corrections by hand ---
+
+    private fun correct(change: (Overrides) -> Overrides) {
+        _overrides.update(change)
+        val o = _overrides.value
+        scope.launch(Dispatchers.IO) { writes.withLock { store.saveOverrides(o) } }
+        rescan()
+    }
+
+    /** Joins books into one, in the order the folders give them. */
+    fun merge(books: List<Book>) {
+        val ids = books.map { it.draft }.filter { it.isNotEmpty() }.toSet()
+        if (ids.size < 2) return
+        correct { o ->
+            // Books that were joined before are taken apart into what they were made of.
+            val parts = ids.flatMap { id -> o.merges[id.substringAfter('#')] ?: setOf(id) }.toSet()
+            val stale = ids.map { it.substringAfter('#') }.filter { it in o.merges }
+            o.copy(merges = o.merges - stale.toSet() + (Grouping.mergeKey(parts) to parts))
+        }
+    }
+
+    /** Undoes a join: by hand, or of disc folders. */
+    fun unmerge(book: Book) = correct { o ->
+        val key = book.draft.substringAfter('#')
+        if (book.joined) o.copy(merges = o.merges - key) else o.copy(keepApart = o.keepApart + book.folder)
+    }
+
+    /** One book per file, for a folder of stories that aren't one book. */
+    fun cutPerFile(book: Book) = correct { o -> o.copy(perFile = o.perFile + book.draft) }
+
+    /** Gathers a folder's files back into one book, undoing a cut. */
+    fun uncut(folder: String) = correct { o -> o.copy(perFile = o.perFile.filterNot { it.startsWith("$folder#") }.toSet()) }
+
+    /** Whether files in this folder were cut into one book each by hand. */
+    fun isCut(folder: String) = _overrides.value.perFile.any { it.startsWith("$folder#") }
+
+    /** Details by hand: shown at once, kept over rescans; null puts the tags' back. */
+    fun edit(book: Book, edit: Edit?) {
+        if (edit == null) {
+            correct { o -> o.copy(edits = o.edits - book.id) }
+            return
+        }
+        _overrides.update { it.copy(edits = it.edits + (book.id to edit)) }
+        val o = _overrides.value
+        val changed = book.with(edit)
+        _books.update { all -> all.map { if (it.id == book.id) changed else it } }
+        byId = _books.value.associateBy { it.id }
+        index = FolderIndex(_books.value, settings.value.roots)
+        val snapshot = _books.value
+        scope.launch(Dispatchers.IO) { writes.withLock { store.saveOverrides(o); store.saveLibrary(snapshot) } }
+    }
+
+    fun editOf(book: Book): Edit? = _overrides.value.edits[book.id]
 
     /**
      * Where Smart AudioBook Player left each book, from the position file it
@@ -154,6 +245,19 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
     }
 
     fun entries(folder: String?): List<Entry> = index.entries(folder)
+
+    /** The folders to open, from the top, to see this book listed. */
+    fun pathTo(book: Book): List<String> {
+        val root = settings.value.roots.map { it.trimEnd('/') }
+            .filter { book.folder == it || book.folder.startsWith("$it/") }.maxByOrNull { it.length } ?: return emptyList()
+        val listed = index.listedIn(book)
+        val steps = ArrayList<String>()
+        var dir = listed
+        while (dir.length > root.length) { steps.add(0, dir); dir = dir.substringBeforeLast('/') }
+        // Several chosen folders: their list is the top, so the root itself is a step.
+        if (settings.value.roots.size > 1) steps.add(0, root)
+        return steps
+    }
     fun folderBooks(folder: String): List<Book> = index.booksUnder(folder)
     fun rootFolder(): String? = index.single()
     fun parentOf(folder: String): String? = index.parentOf(folder)
@@ -193,8 +297,15 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
         _replaced.tryEmit(books.mapTo(HashSet()) { it.id })
     }
 
-    fun addBookmark(bookId: String, positionMs: Long, note: String) {
-        _bookmarks.update { it + Bookmark(System.currentTimeMillis(), bookId, positionMs, note, System.currentTimeMillis()) }
+    fun addBookmark(bookId: String, positionMs: Long, note: String): Long {
+        val id = System.currentTimeMillis()
+        _bookmarks.update { it + Bookmark(id, bookId, positionMs, note, id) }
+        persistBookmarks()
+        return id
+    }
+
+    fun noteBookmark(id: Long, note: String) {
+        _bookmarks.update { all -> all.map { if (it.id == id) it.copy(note = note.trim()) else it } }
         persistBookmarks()
     }
 

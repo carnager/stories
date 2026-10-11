@@ -33,6 +33,7 @@ class Store(private val dir: File) {
                 author = o.optString("author"), narrator = o.optString("narrator"), year = o.optString("year"),
                 series = o.optString("series"), tracks = tracks,
                 cover = o.optString("cover").ifEmpty { null }, fingerprint = o.optString("fp"),
+                draft = o.optString("draft"), edited = o.optBoolean("edited"),
             )
         }
     }.getOrDefault(emptyList())
@@ -43,7 +44,8 @@ class Store(private val dir: File) {
             array.put(JSONObject().apply {
                 put("id", b.id); put("folder", b.folder); put("title", b.title)
                 put("author", b.author); put("narrator", b.narrator); put("year", b.year); put("series", b.series)
-                put("cover", b.cover ?: ""); put("fp", b.fingerprint)
+                put("cover", b.cover ?: ""); put("fp", b.fingerprint); put("draft", b.draft)
+                if (b.edited) put("edited", true)
                 put("tracks", JSONArray().apply {
                     b.tracks.forEach { t ->
                         put(JSONObject().apply {
@@ -101,6 +103,41 @@ class Store(private val dir: File) {
             array.put(JSONObject().put("id", b.id).put("book", b.bookId).put("pos", b.positionMs).put("note", b.note).put("at", b.created))
         }
         writeAtomically(bookmarksFile, array.toString())
+    }
+
+    private val overridesFile = File(dir, "overrides.json")
+
+    fun loadOverrides(): Overrides = runCatching {
+        if (!overridesFile.exists()) return Overrides()
+        val o = JSONObject(overridesFile.readText())
+        fun strings(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { a!!.getString(it) }
+        val merges = o.optJSONObject("merges")?.let { m -> m.keys().asSequence().associateWith { strings(m.getJSONArray(it)).toSet() } }.orEmpty()
+        val edits = o.optJSONObject("edits")?.let { e ->
+            e.keys().asSequence().associateWith { id ->
+                val x = e.getJSONObject(id)
+                fun field(name: String) = if (x.has(name)) x.getString(name) else null
+                Edit(field("title"), field("author"), field("narrator"), field("series"))
+            }
+        }.orEmpty()
+        Overrides(merges, strings(o.optJSONArray("perFile")).toSet(), strings(o.optJSONArray("keepApart")).toSet(), edits)
+    }.getOrDefault(Overrides())
+
+    fun saveOverrides(o: Overrides) {
+        val json = JSONObject()
+        json.put("merges", JSONObject().apply { o.merges.forEach { (k, v) -> put(k, JSONArray(v.sorted())) } })
+        json.put("perFile", JSONArray(o.perFile.sorted()))
+        json.put("keepApart", JSONArray(o.keepApart.sorted()))
+        json.put("edits", JSONObject().apply {
+            o.edits.forEach { (id, e) ->
+                put(id, JSONObject().apply {
+                    e.title?.let { put("title", it) }
+                    e.author?.let { put("author", it) }
+                    e.narrator?.let { put("narrator", it) }
+                    e.series?.let { put("series", it) }
+                })
+            }
+        })
+        writeAtomically(overridesFile, json.toString(2))
     }
 
     /** Everything heard, as one file to keep or move to another phone. */

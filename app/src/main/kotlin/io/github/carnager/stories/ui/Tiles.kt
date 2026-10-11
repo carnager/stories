@@ -1,7 +1,12 @@
 package io.github.carnager.stories.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,14 +51,17 @@ private fun statusColor(progress: Progress?): Color = when (progress.status()) {
 /** A book in a grid: its cover, which is how it's known, and its name and state beneath. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookTile(book: Book, name: String, progress: Progress?, playing: Boolean, onOpen: () -> Unit, onHold: () -> Unit) {
+fun BookTile(book: Book, name: String, progress: Progress?, playing: Boolean, onOpen: () -> Unit, onHold: () -> Unit, picked: Boolean? = null) {
     Column(
         Modifier
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = onOpen, onLongClick = onHold)
             .padding(6.dp),
     ) {
-        StatusCover(book, progress, Modifier.fillMaxWidth(), playing = playing)
+        Box {
+            StatusCover(book, progress, Modifier.fillMaxWidth(), playing = playing)
+            if (picked != null) PickMark(picked, Modifier.align(Alignment.TopStart).padding(6.dp))
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             name, style = bookTitle, maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -66,7 +74,7 @@ fun BookTile(book: Book, name: String, progress: Progress?, playing: Boolean, on
 /** A book as a row, for the list view. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookRow(book: Book, name: String, progress: Progress?, playing: Boolean, onOpen: () -> Unit, onHold: () -> Unit) {
+fun BookRow(book: Book, name: String, progress: Progress?, playing: Boolean, onOpen: () -> Unit, onHold: () -> Unit, picked: Boolean? = null) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -74,7 +82,10 @@ fun BookRow(book: Book, name: String, progress: Progress?, playing: Boolean, onO
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatusCover(book, progress, Modifier.size(60.dp), corner = 8.dp, playing = playing)
+        Box {
+            StatusCover(book, progress, Modifier.size(60.dp), corner = 8.dp, playing = playing)
+            if (picked != null) PickMark(picked, Modifier.align(Alignment.TopStart).padding(3.dp))
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -155,5 +166,21 @@ fun FolderRow(name: String, books: List<Book>, progress: Map<String, Progress>, 
             Text(t.line, style = MaterialTheme.typography.bodySmall, color = LocalTones.current.muted, maxLines = 1)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = LocalTones.current.faint)
+    }
+}
+
+/** Picked or not, while picking books to join: a filled tick or an empty ring on the cover. */
+@Composable
+fun PickMark(picked: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(24.dp)
+            .shadow(2.dp, CircleShape)
+            .clip(CircleShape)
+            .background(if (picked) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.35f))
+            .border(2.dp, Color.White, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (picked) Icon(Icons.Default.Check, "Picked", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
     }
 }

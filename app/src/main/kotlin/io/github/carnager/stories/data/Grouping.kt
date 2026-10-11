@@ -24,7 +24,29 @@ data class FileTags(
 }
 
 /** A book before its cover is found. */
-data class Draft(val folder: String, val key: String, val files: List<FileTags>)
+data class Draft(val folder: String, val key: String, val files: List<FileTags>) {
+    /** Names the book for good: its id is made from this, and the overrides refer to it. */
+    val id: String get() = "$folder#$key"
+}
+
+/** Details set by hand, over what the tags say. */
+data class Edit(val title: String? = null, val author: String? = null, val narrator: String? = null, val series: String? = null)
+
+/**
+ * Corrections made by hand, kept by the app and never written to the files:
+ * books joined into one, books cut into one per file, disc folders kept
+ * apart, and details edited.
+ */
+data class Overrides(
+    /** Each joined book's key, with the books (draft ids) it was made of. */
+    val merges: Map<String, Set<String>> = emptyMap(),
+    /** Books (draft ids) to be one book per file. */
+    val perFile: Set<String> = emptySet(),
+    /** Folders whose disc folders stay books of their own. */
+    val keepApart: Set<String> = emptySet(),
+    /** By book id. */
+    val edits: Map<String, Edit> = emptyMap(),
+)
 
 /**
  * Turns files into books. A folder of files is one book -- the way a
@@ -37,12 +59,46 @@ object Grouping {
     private val discFolder = Regex("""^(cd|disc|disk|part|teil|tape|kassette|seite|side)[\s._-]*\d+.*$""", RegexOption.IGNORE_CASE)
     private val standalone = setOf("m4b")
 
-    fun group(files: List<FileTags>): List<Draft> {
+    fun group(files: List<FileTags>, overrides: Overrides = Overrides()): List<Draft> {
         val byDir = files.groupBy { it.dir }
         val drafts = ArrayList<Draft>()
         for ((dir, inDir) in byDir) drafts += splitFolder(dir, inDir)
-        return mergeDiscs(drafts).map { it.copy(files = sortTracks(it.files)) }
+        val automatic = mergeDiscs(drafts, overrides.keepApart)
+        return join(cut(automatic, overrides.perFile), overrides.merges).map { it.copy(files = sortTracks(it.files)) }
     }
+
+    /** Books asked to be one per file become so; each keeps its folder. */
+    private fun cut(drafts: List<Draft>, perFile: Set<String>): List<Draft> = drafts.flatMap { draft ->
+        if (draft.id !in perFile || draft.files.size < 2) listOf(draft)
+        else draft.files.map { f -> Draft(draft.folder, "file:" + f.path.removePrefix(draft.folder + "/"), listOf(f)) }
+    }
+
+    /** Books joined by hand: one book, in the folder they all sit in. */
+    private fun join(drafts: List<Draft>, merges: Map<String, Set<String>>): List<Draft> {
+        if (merges.isEmpty()) return drafts
+        val byId = drafts.associateBy { it.id }
+        val used = HashSet<String>()
+        val result = ArrayList<Draft>()
+        for ((key, ids) in merges) {
+            val parts = ids.mapNotNull { byId[it] }.filter { it.id !in used }
+            if (parts.size < 2) continue
+            parts.forEach { used += it.id }
+            result += Draft(commonFolder(parts.map { it.folder }), key, parts.flatMap { it.files })
+        }
+        result += drafts.filter { it.id !in used }
+        return result
+    }
+
+    fun commonFolder(folders: List<String>): String {
+        var common = folders.first()
+        for (f in folders) {
+            while (f != common && !f.startsWith("$common/")) common = common.substringBeforeLast('/', "")
+        }
+        return common
+    }
+
+    /** The key a hand-made join of these books gets: the same for the same books. */
+    fun mergeKey(ids: Collection<String>) = "merge:" + hash(ids.sorted().joinToString("|"))
 
     private fun splitFolder(dir: String, files: List<FileTags>): List<Draft> {
         // Several .m4b in one folder are several books, unless they share an album.
@@ -68,14 +124,14 @@ object Grouping {
     }
 
     /** Sibling folders named like discs, or tagged as discs of one album, become one book in their parent. */
-    private fun mergeDiscs(drafts: List<Draft>): List<Draft> {
+    private fun mergeDiscs(drafts: List<Draft>, keepApart: Set<String>): List<Draft> {
         val candidates = drafts.filter { it.key == "" || !it.key.startsWith("file:") }
             .groupBy { it.folder.substringBeforeLast('/') }
         val merged = HashSet<Draft>()
         val result = ArrayList<Draft>()
         val atFolder = drafts.groupBy { it.folder }
         for ((parent, siblings) in candidates) {
-            if (siblings.size < 2) continue
+            if (siblings.size < 2 || parent in keepApart) continue
             // The parent's own files would make it a book of its own; keep apart then.
             if (atFolder[parent] != null) continue
             val named = siblings.filter { discFolder.matches(it.folder.substringAfterLast('/')) }
@@ -121,6 +177,11 @@ object Grouping {
 
     /** The book's name: its album when its files agree on one, else its folder's or file's name. */
     fun title(draft: Draft, folderName: String): String {
+        // Joined by hand: named after its first part.
+        if (draft.key.startsWith("merge:")) {
+            val first = draft.files.first()
+            return first.album.trim().ifEmpty { first.dir.substringAfterLast('/') }
+        }
         val albums = draft.files.map { it.album.trim() }.filter { it.isNotEmpty() }
         val album = albums.groupingBy { it }.eachCount().maxByOrNull { it.value }
         if (album != null && album.value * 2 > draft.files.size) return album.key

@@ -128,13 +128,14 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
     val state by app.playback.state.collectAsState()
     val sleep by app.playback.sleep.state.collectAsState()
     val settings by app.settings.state.collectAsState()
-    val book = app.library.book(state.bookId)
+    val book = bookFor(app, state.bookId)
     val ground = groundFor(book)
     val top by animateColorAsState(ground.top, tween(600), label = "top")
     val bottom by animateColorAsState(ground.bottom, tween(600), label = "bottom")
     val accent by animateColorAsState(ground.accent, tween(600), label = "accent")
     val text = ground.text
     var sheet by remember { mutableStateOf<String?>(null) }
+    var marked by remember { mutableStateOf(0L) }
     var pull by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
 
@@ -215,7 +216,7 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
                     Chip(Icons.Default.Bedtime, sleep?.let { if (it.endOfChapter) "Chapter end" else clock(it.remainingMs) } ?: "Sleep",
                         sleep != null, accent, ground.soft) { sheet = "sleep" }
                     Chip(Icons.Default.BookmarkAdd, "Mark", false, accent, ground.soft) {
-                        app.library.addBookmark(book.id, app.playback.position(), "")
+                        marked = app.library.addBookmark(book.id, app.playback.position(), "")
                         sheet = "marked"
                     }
                 }
@@ -228,7 +229,7 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
         "chapters" -> ChaptersSheet(app) { sheet = null }
         "speed" -> SpeedSheet(app) { sheet = null }
         "sleep" -> SleepSheet(app) { sheet = null }
-        "marked" -> MarkedSheet(app) { sheet = null }
+        "marked" -> MarkedSheet(app, marked) { sheet = null }
     }
 }
 

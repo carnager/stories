@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
@@ -183,4 +184,11 @@ fun span(ms: Long): String {
 fun speedLabel(speed: Float): String {
     val text = "%.2f".format(speed).trimEnd('0').trimEnd('.', ',')
     return "${text}×"
+}
+
+/** A book by id that follows the library: renamed, rejoined or rescanned, the screen shows the new one. */
+@Composable
+fun bookFor(app: io.github.carnager.stories.App, id: String?): io.github.carnager.stories.data.Book? {
+    val books by app.library.books.collectAsState()
+    return remember(books, id) { app.library.book(id) }
 }

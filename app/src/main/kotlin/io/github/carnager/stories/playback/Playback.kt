@@ -116,6 +116,20 @@ class Playback(
                 sought = true
             }
         }
+        // The book playing joined with others, or cut apart: on in its new shape, from the same spot.
+        scope.launch {
+            library.books.collect {
+                val b = book ?: return@collect
+                if (library.book(b.id) != null) return@collect
+                val path = b.tracks.getOrNull(exo.currentMediaItemIndex)?.path ?: return@collect
+                val now = it.firstOrNull { n -> n.tracks.any { t -> t.path == path } } ?: return@collect
+                val fileIndex = now.tracks.indexOfFirst { t -> t.path == path }
+                val at = now.trackStarts[fileIndex] + exo.currentPosition
+                val playing = exo.isPlaying
+                load(now, at)
+                if (playing) exo.play()
+            }
+        }
         restoreLast()
     }
 

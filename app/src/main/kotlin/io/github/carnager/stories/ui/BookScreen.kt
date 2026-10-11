@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
@@ -36,7 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,8 +72,10 @@ fun BookScreen(app: App, nav: Nav, book: Book) {
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             item {
-                IconButton(onClick = { nav.book = null }, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp)) {
+                    IconButton(onClick = { nav.book = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    Spacer(Modifier.weight(1f))
+                    BookMenu(app, nav, book)
                 }
                 Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     Box(Modifier.width(150.dp).shadow(14.dp, RoundedCornerShape(12.dp))) {
@@ -140,6 +145,8 @@ fun BookScreen(app: App, nav: Nav, book: Book) {
             if (marks.isNotEmpty()) {
                 item { SectionLabel("Bookmarks") }
                 items(marks, key = { "m${it.id}" }) { mark ->
+                    var noting by remember { mutableStateOf(false) }
+                    if (noting) NoteDialog(mark.note, { app.library.noteBookmark(mark.id, it) }) { noting = false }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -153,6 +160,9 @@ fun BookScreen(app: App, nav: Nav, book: Book) {
                             Text(mark.note.ifBlank { book.chapters.getOrNull(book.chapterAt(mark.positionMs))?.title.orEmpty() },
                                 style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(clock(mark.positionMs), style = MaterialTheme.typography.bodySmall, color = tones.muted)
+                        }
+                        IconButton(onClick = { noting = true }) {
+                            Icon(Icons.Default.Edit, "Note", Modifier.size(18.dp), tint = tones.muted)
                         }
                         IconButton(onClick = { app.library.removeBookmark(mark.id) }) {
                             Icon(Icons.Default.Close, "Remove bookmark", Modifier.size(18.dp), tint = tones.muted)
@@ -212,4 +222,16 @@ fun ChapterRow(index: Int, title: String, durationMs: Long, current: Boolean, he
         Spacer(Modifier.width(12.dp))
         Text(clock(durationMs), style = MaterialTheme.typography.bodySmall, color = tones.muted)
     }
+}
+
+@Composable
+private fun NoteDialog(note: String, onSave: (String) -> Unit, onDone: () -> Unit) {
+    var text by remember { mutableStateOf(note) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Note") },
+        text = { androidx.compose.material3.OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(text); onDone() }) { Text("Save") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDone) { Text("Cancel") } },
+    )
 }

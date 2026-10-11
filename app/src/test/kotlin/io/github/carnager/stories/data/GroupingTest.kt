@@ -95,4 +95,35 @@ class GroupingTest {
         assertEquals(2, book.chapterAt(12_000))
         assertEquals(1 to 2_000L, book.locate(12_000))
     }
+
+    @Test
+    fun `books joined by hand become one in their common folder`() {
+        val files = listOf(f("/A/S/Part one/1.mp3"), f("/A/S/Part two/1.mp3"), f("/A/S/Other/1.mp3"))
+        val ids = setOf("/A/S/Part one#", "/A/S/Part two#")
+        val drafts = Grouping.group(files, Overrides(merges = mapOf(Grouping.mergeKey(ids) to ids)))
+        assertEquals(2, drafts.size)
+        val joined = drafts.single { it.files.size == 2 }
+        assertEquals("/A/S", joined.folder)
+        assertEquals(listOf("/A/S/Part one/1.mp3", "/A/S/Part two/1.mp3"), joined.files.map { it.path })
+    }
+
+    @Test
+    fun `a book cut per file is one book per file`() {
+        val files = listOf(f("/A/Tales/a.mp3"), f("/A/Tales/b.mp3"), f("/A/Tales/c.mp3"))
+        val drafts = Grouping.group(files, Overrides(perFile = setOf("/A/Tales#")))
+        assertEquals(3, drafts.size)
+        assertEquals(setOf("/A/Tales"), drafts.map { it.folder }.toSet())
+    }
+
+    @Test
+    fun `disc folders can be kept apart`() {
+        val files = listOf(f("/A/Book/CD1/01.mp3"), f("/A/Book/CD2/01.mp3"))
+        assertEquals(2, Grouping.group(files, Overrides(keepApart = setOf("/A/Book"))).size)
+    }
+
+    @Test
+    fun `common folder`() {
+        assertEquals("/A/S", Grouping.commonFolder(listOf("/A/S/x", "/A/S/y/z")))
+        assertEquals("/A/S/x", Grouping.commonFolder(listOf("/A/S/x", "/A/S/x")))
+    }
 }

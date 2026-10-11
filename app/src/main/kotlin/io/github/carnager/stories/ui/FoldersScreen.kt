@@ -1,5 +1,6 @@
 package io.github.carnager.stories.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +45,16 @@ import io.github.carnager.stories.data.Entry
  * a series -- shows their covers stacked and how many are done.
  */
 @Composable
-fun FoldersScreen(app: App, nav: Nav) {
+fun FoldersScreen(app: App, nav: Nav) = androidx.compose.foundation.layout.Box {
+    FolderList(app, nav)
+    if (nav.joining.isNotEmpty()) {
+        androidx.activity.compose.BackHandler { nav.joining.clear() }
+        JoinBar(app, nav)
+    }
+}
+
+@Composable
+private fun FolderList(app: App, nav: Nav) {
     val books by app.library.books.collectAsState()
     val progress by app.library.progress.collectAsState()
     val settings by app.settings.state.collectAsState()
@@ -77,18 +87,21 @@ fun FoldersScreen(app: App, nav: Nav) {
         }
         if (nav.folders.size > 1) Breadcrumbs(nav)
 
+        val picking = nav.joining.isNotEmpty()
         val open: (Entry) -> Unit = { entry ->
             when (entry) {
                 is Entry.Folder -> nav.folders.add(entry.path)
-                is Entry.Item -> nav.book = entry.book.id
+                is Entry.Item -> if (picking) pick(nav, entry.book.id) else nav.book = entry.book.id
             }
         }
         val hold: (Entry) -> Unit = { entry ->
-            nav.holding = when (entry) {
-                is Entry.Folder -> Hold.OnFolder(entry)
-                is Entry.Item -> Hold.OnBook(entry.book)
+            when {
+                picking && entry is Entry.Item -> pick(nav, entry.book.id)
+                entry is Entry.Folder -> nav.holding = Hold.OnFolder(entry)
+                entry is Entry.Item -> nav.holding = Hold.OnBook(entry.book)
             }
         }
+        val picked: (Entry.Item) -> Boolean? = { if (picking) it.book.id in nav.joining else null }
         if (entries.isEmpty()) {
             Text(
                 "Nothing here yet.",
@@ -104,7 +117,7 @@ fun FoldersScreen(app: App, nav: Nav) {
                 items(entries, key = { it.key() }) { entry ->
                     when (entry) {
                         is Entry.Folder -> FolderTile(entry.name, entry.books, progress, { open(entry) }, { hold(entry) })
-                        is Entry.Item -> BookTile(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) })
+                        is Entry.Item -> BookTile(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) }, picked(entry))
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { Legend() }
@@ -114,10 +127,53 @@ fun FoldersScreen(app: App, nav: Nav) {
                 items(entries, key = { it.key() }) { entry ->
                     when (entry) {
                         is Entry.Folder -> FolderRow(entry.name, entry.books, progress, { open(entry) }, { hold(entry) })
-                        is Entry.Item -> BookRow(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) })
+                        is Entry.Item -> BookRow(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) }, picked(entry))
                     }
                 }
                 item { Legend() }
+            }
+        }
+    }
+}
+
+private fun pick(nav: Nav, id: String) {
+    if (id in nav.joining) nav.joining.remove(id) else nav.joining.add(id)
+}
+
+/**
+ * While picking books to join: how many, and the button that joins them.
+ * Books from different folders may be joined too; the book then lives in
+ * the folder they share.
+ */
+@Composable
+private fun JoinBar(app: App, nav: Nav) {
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(12.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.inverseSurface)
+                .padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (nav.joining.size < 2) "Pick the books to join" else "${nav.joining.size} books picked",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.material3.TextButton(onClick = { nav.joining.clear() }) {
+                Text("Cancel", color = MaterialTheme.colorScheme.inverseOnSurface)
+            }
+            androidx.compose.material3.TextButton(
+                enabled = nav.joining.size >= 2,
+                onClick = {
+                    app.library.merge(nav.joining.mapNotNull { app.library.book(it) })
+                    nav.joining.clear()
+                },
+            ) {
+                Text("Join", color = MaterialTheme.colorScheme.inversePrimary, style = MaterialTheme.typography.labelLarge)
             }
         }
     }

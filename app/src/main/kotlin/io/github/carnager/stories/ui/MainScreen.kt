@@ -66,6 +66,9 @@ class Nav {
     var player by mutableStateOf(false)
     var settings by mutableStateOf(false)
     var holding by mutableStateOf<Hold?>(null)
+
+    /** Books picked to be joined into one; empty when not picking. */
+    val joining = mutableStateListOf<String>()
 }
 
 /** What a long press was on, for its sheet of actions. */
@@ -135,7 +138,7 @@ fun MainScreen(app: App, nav: Nav) {
             // Kept while it slides away, so it doesn't go blank on the way out.
             val shown = remember { mutableStateOf<String?>(null) }
             nav.book?.let { shown.value = it }
-            shown.value?.let { id -> app.library.book(id)?.let { BookScreen(app, nav, it) } }
+            bookFor(app, shown.value)?.let { BookScreen(app, nav, it) }
         }
         AnimatedVisibility(nav.player, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
             PlayerScreen(app) { nav.player = false }
@@ -151,7 +154,7 @@ fun MainScreen(app: App, nav: Nav) {
 @Composable
 fun MiniPlayer(app: App, onOpen: () -> Unit) {
     val state by app.playback.state.collectAsState()
-    val book = app.library.book(state.bookId) ?: return
+    val book = bookFor(app, state.bookId) ?: return
     val position = livePosition(app.playback, state.playing)
     val chapter = book.chapters.getOrNull(book.chapterAt(position))
     Surface(
