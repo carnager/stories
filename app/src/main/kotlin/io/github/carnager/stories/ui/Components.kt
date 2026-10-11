@@ -173,6 +173,7 @@ fun span(ms: Long): String {
     val h = minutes / 60
     val m = minutes % 60
     return when {
+        ms in 1 until 60_000 -> "under a minute"
         h == 0L -> "$m min"
         m == 0L -> "$h h"
         else -> "$h h $m min"

@@ -290,6 +290,7 @@ class Playback(
                 lastPlayed = if (exo.isPlaying || ended) System.currentTimeMillis() else old?.lastPlayed ?: System.currentTimeMillis(),
             ),
             persist,
+            shared = persist && !exo.isPlaying,
         )
     }
 

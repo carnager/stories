@@ -16,6 +16,12 @@ An audiobook player for Android, for libraries kept in folders.
 - **Smart AudioBook Player** positions are taken over: the
   `position.sabp.dat` it leaves in each book folder is read on every scan,
   and a newer one wins, so both apps can be used side by side.
+- **Synced libraries**: optionally, each book's place is also kept in a small
+  `.stories-position.json` beside it, so a library synced between devices
+  (Syncthing, Nextcloud) carries where you were; the newest place wins.
+- **Chapters** also from CUE sheets and FLAC/Ogg/Opus `CHAPTERxx` comments.
+- **Android Auto**: the books being heard and the folders, to browse in the car.
+- **Widget**: the book being heard on the home screen, with back and play.
 - Step back after a pause, per-book speed, sleep timer with fade-out and
   shake to start it over, bookmarks, skip silence, lock screen, headphones
   and car controls that skip seconds rather than files.

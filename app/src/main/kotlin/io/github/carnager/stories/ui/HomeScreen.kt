@@ -61,7 +61,8 @@ fun HomeScreen(app: App, nav: Nav) {
     val finished = remember(books, progress) {
         books.filter { progress[it.id].status() == Status.Finished }.sortedByDescending { progress[it.id]?.lastPlayed ?: 0 }.take(12)
     }
-    val next = remember(current, progress) { current?.let { app.library.nextInSeries(it) } }
+    // Only a series has a next: loose books side by side don't follow one another.
+    val next = remember(current, progress) { current?.takeIf { it.series.isNotEmpty() }?.let { app.library.nextInSeries(it) } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -83,7 +84,7 @@ fun HomeScreen(app: App, nav: Nav) {
         }
         next?.let { book ->
             item {
-                SectionLabel(if (book.series.isNotEmpty()) "Next in ${book.series}" else "Next in this folder")
+                SectionLabel("Next in ${book.series}")
                 BookRow(book, book.title, progress[book.id], false, onOpen = { nav.book = book.id }, onHold = { nav.holding = Hold.OnBook(book) })
             }
         }

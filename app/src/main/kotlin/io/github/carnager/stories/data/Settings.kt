@@ -16,6 +16,7 @@ data class Settings(
     val theme: String = "system",
     val dynamicColor: Boolean = false,
     val grid: Boolean = true,
+    val shareInFolders: Boolean = false,
 )
 
 class SettingsStore(context: Context) {
@@ -35,6 +36,7 @@ class SettingsStore(context: Context) {
         theme = prefs.getString("theme", "system")!!,
         dynamicColor = prefs.getBoolean("dynamic", false),
         grid = prefs.getBoolean("grid", true),
+        shareInFolders = prefs.getBoolean("share", false),
     )
 
     fun update(change: (Settings) -> Settings) {
@@ -50,6 +52,7 @@ class SettingsStore(context: Context) {
             .putString("theme", s.theme)
             .putBoolean("dynamic", s.dynamicColor)
             .putBoolean("grid", s.grid)
+            .putBoolean("share", s.shareInFolders)
             .apply()
         _state.value = s
     }

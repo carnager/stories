@@ -65,7 +65,7 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
                 val found = scanner.scan(roots) { _scanning.value = it }
                     .sortedWith { a, b -> NaturalOrder.compare(a.folder + "/" + a.title, b.folder + "/" + b.title) }
                 adoptMoved(found)
-                importSabp(found)
+                importFolderPositions(found)
                 index = FolderIndex(found, roots)
                 byId = found.associateBy { it.id }
                 _books.value = found
@@ -98,37 +98,59 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
 
     /**
      * Where Smart AudioBook Player left each book, from the position file it
-     * keeps in the book's folder. Taken when it's newer than what's here, so
-     * listening on in either app carries over.
+     * keeps in the book's folder, and where Stories on another device left
+     * it, from its own. Each taken when newer than what's here, so listening
+     * on elsewhere carries over.
      */
-    private fun importSabp(found: List<Book>) {
+    private fun importFolderPositions(found: List<Book>) {
         val imported = HashMap<String, Progress>()
-        for (book in found) {
-            val file = File(book.folder, SabpReader.FILE_NAME)
-            if (!file.isFile) continue
-            val sabp = SabpReader.read(file) ?: continue
-            val known = _progress.value[book.id]
-            if (known != null && known.lastPlayed >= sabp.lastPlayed) continue
-            val index = book.tracks.indexOfFirst { it.path.substringAfterLast('/') == sabp.fileName }
-            // A folder split into several books: the file names which one.
-            if (index < 0) continue
-            val track = book.tracks[index]
-            // Seconds, as far as seen; read as milliseconds should seconds overrun the file.
-            val inTrack = sabp.fileSeconds * 1000L
-            val trackMs = if (track.durationMs > 0 && inTrack > track.durationMs + 60_000 && sabp.fileSeconds <= track.durationMs) sabp.fileSeconds.toLong() else inTrack
-            val finished = sabp.state.equals("Finished", true) || sabp.state.equals("Completed", true)
-            val position = if (finished) book.durationMs else (book.trackStarts[index] + trackMs).coerceAtMost(book.durationMs)
-            if (!finished && position <= 0 && known == null) continue
-            imported[book.id] = Progress(
-                bookId = book.id, fingerprint = book.fingerprint, trackIndex = index, trackPositionMs = trackMs,
-                positionMs = position, durationMs = book.durationMs, finished = finished,
-                speed = sabp.speed, lastPlayed = sabp.lastPlayed,
-            )
+        fun take(book: Book, p: Progress?) {
+            if (p == null) return
+            val known = imported[book.id] ?: _progress.value[book.id]
+            if (known != null && known.lastPlayed >= p.lastPlayed) return
+            if (!p.finished && p.positionMs <= 0 && known == null) return
+            imported[book.id] = p
+        }
+        for ((folder, books) in found.groupBy { it.folder }) {
+            File(folder, SabpReader.FILE_NAME).takeIf { it.isFile }?.let(SabpReader::read)?.let { sabp ->
+                // Seconds, as far as seen; read as milliseconds should seconds overrun the file.
+                val book = books.firstOrNull { b -> b.tracks.any { it.path.substringAfterLast('/') == sabp.fileName } } ?: return@let
+                val track = book.tracks.first { it.path.substringAfterLast('/') == sabp.fileName }
+                val inTrack = sabp.fileSeconds * 1000L
+                val fileMs = if (track.durationMs > 0 && inTrack > track.durationMs + 60_000 && sabp.fileSeconds <= track.durationMs) sabp.fileSeconds.toLong() else inTrack
+                val finished = sabp.state.equals("Finished", true) || sabp.state.equals("Completed", true)
+                take(book, placeAt(book, sabp.fileName, fileMs, finished, sabp.speed, sabp.lastPlayed))
+            }
+            val shared = FolderPositions.read(folder)
+            for (book in books) {
+                val e = shared[book.fingerprint] ?: continue
+                take(book, placeAt(book, e.fileName, e.fileMs, e.finished, e.speed, e.lastPlayed))
+            }
         }
         if (imported.isEmpty()) return
         _progress.update { it + imported }
         persistProgress()
         _replaced.tryEmit(imported.keys)
+    }
+
+    private fun placeAt(book: Book, fileName: String, fileMs: Long, finished: Boolean, speed: Float, lastPlayed: Long): Progress? {
+        val index = book.tracks.indexOfFirst { it.path.substringAfterLast('/') == fileName }
+        if (index < 0) return null
+        val position = if (finished) book.durationMs else (book.trackStarts[index] + fileMs).coerceAtMost(book.durationMs)
+        return Progress(
+            bookId = book.id, fingerprint = book.fingerprint, trackIndex = index, trackPositionMs = fileMs,
+            positionMs = position, durationMs = book.durationMs, finished = finished,
+            speed = speed, lastPlayed = lastPlayed,
+        )
+    }
+
+    /** Into the book's folder, for other devices, when the setting asks for it. */
+    private fun share(ids: Collection<String>) {
+        if (!settings.value.shareInFolders) return
+        val books = ids.mapNotNull { id -> book(id)?.let { it to _progress.value[id] } }
+        scope.launch(Dispatchers.IO) {
+            books.forEach { (book, p) -> if (p != null) FolderPositions.write(book, p) }
+        }
     }
 
     fun entries(folder: String?): List<Entry> = index.entries(folder)
@@ -144,9 +166,11 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
         return siblings.drop(at + 1).firstOrNull { _progress.value[it.id].status() != Status.Finished }
     }
 
-    fun setProgress(p: Progress, persist: Boolean) {
+    /** [shared] when the book stopped: then its place also goes into its folder, if that's wanted. */
+    fun setProgress(p: Progress, persist: Boolean, shared: Boolean = false) {
         _progress.update { it + (p.bookId to p) }
         if (persist) persistProgress()
+        if (shared) share(listOf(p.bookId))
     }
 
     fun markFinished(books: List<Book>, finished: Boolean) {
@@ -165,6 +189,7 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
             result
         }
         persistProgress()
+        share(books.map { it.id })
         _replaced.tryEmit(books.mapTo(HashSet()) { it.id })
     }
 

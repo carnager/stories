@@ -148,6 +148,11 @@ fun SettingsScreen(app: App, onClose: () -> Unit) {
             }
 
             SectionLabel("Your listening")
+            Toggle(
+                "Keep places in the book folders",
+                "A small file beside each book, so a synced copy of the folders (Syncthing, Nextcloud) carries where you were to your other devices",
+                settings.shareInFolders,
+            ) { v -> app.settings.update { it.copy(shareInFolders = v) } }
             val context = LocalContext.current
             Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 Pill("Save a copy", null, onClick = {
