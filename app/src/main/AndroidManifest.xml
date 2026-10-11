@@ -41,6 +41,18 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".Widget"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
         <!-- Covers for the car, lock screen and watch, which can't read the app's files. -->
         <provider
             android:name=".playback.CoverProvider"

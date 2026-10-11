@@ -137,6 +137,16 @@ fun SettingsScreen(app: App, onClose: () -> Unit) {
             Toggle("Wallpaper colours", "Material You, instead of the lamp and paper", settings.dynamicColor) { v -> app.settings.update { it.copy(dynamicColor = v) } }
             Toggle("Covers in a grid", "Otherwise a list with small covers", settings.grid) { v -> app.settings.update { it.copy(grid = v) } }
 
+            val widgets = LocalContext.current.getSystemService(android.appwidget.AppWidgetManager::class.java)
+            if (widgets?.isRequestPinAppWidgetSupported == true) {
+                val context = LocalContext.current
+                Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                    Pill("Add widget to home screen", Icons.Default.Add, onClick = {
+                        widgets.requestPinAppWidget(android.content.ComponentName(context, io.github.carnager.stories.Widget::class.java), null, null)
+                    })
+                }
+            }
+
             SectionLabel("Your listening")
             val context = LocalContext.current
             Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
