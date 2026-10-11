@@ -3,7 +3,9 @@ package io.github.carnager.stories.data
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -38,6 +40,11 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
 
     private val _bookmarks = MutableStateFlow(store.loadBookmarks())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
+
+    private val _replaced = MutableSharedFlow<Set<String>>(extraBufferCapacity = 8)
+
+    /** Books whose place was set from outside the player: imported, or marked finished or new. */
+    val replaced: SharedFlow<Set<String>> = _replaced
 
     private val _scanning = MutableStateFlow<Scanner.Progress?>(null)
     val scanning: StateFlow<Scanner.Progress?> = _scanning.asStateFlow()
@@ -121,6 +128,7 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
         if (imported.isEmpty()) return
         _progress.update { it + imported }
         persistProgress()
+        _replaced.tryEmit(imported.keys)
     }
 
     fun entries(folder: String?): List<Entry> = index.entries(folder)
@@ -157,6 +165,7 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
             result
         }
         persistProgress()
+        _replaced.tryEmit(books.mapTo(HashSet()) { it.id })
     }
 
     fun addBookmark(bookId: String, positionMs: Long, note: String) {

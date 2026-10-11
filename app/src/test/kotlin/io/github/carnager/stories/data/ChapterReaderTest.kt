@@ -10,7 +10,7 @@ class ChapterReaderTest {
     fun `reads chapters of sample files`() {
         val dir = System.getenv("STORIES_SAMPLES")?.let(::File)
         assumeTrue(dir?.isDirectory == true)
-        dir!!.walkTopDown().filter { it.isFile && it.extension.lowercase() in setOf("m4b", "m4a", "mp3") }.forEach { f ->
+        dir!!.walkTopDown().filter { it.isFile && it.extension.lowercase() in setOf("m4b", "m4a", "mp3", "flac", "ogg", "opus") }.forEach { f ->
             val marks = ChapterReader.read(f)
             if (marks.isNotEmpty()) println("${f.name}: " + marks.joinToString { "${it.startMs}=${it.title}" })
         }

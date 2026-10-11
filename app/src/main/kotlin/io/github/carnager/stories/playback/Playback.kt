@@ -102,6 +102,20 @@ class Playback(
             }
         }
         scope.launch { settings.state.collect { exo.skipSilenceEnabled = it.skipSilence } }
+        // A paused book whose place changed elsewhere goes there, or its next save would undo the change.
+        scope.launch {
+            library.replaced.collect { ids ->
+                val b = book ?: return@collect
+                if (b.id !in ids || exo.isPlaying) return@collect
+                val p = library.progress.value[b.id] ?: return@collect
+                ended = p.finished
+                val (index, offset) = b.locate(if (p.finished) b.durationMs else p.positionMs)
+                exo.seekTo(index, offset)
+                exo.setPlaybackSpeed(p.speed)
+                _state.update { it.copy(speed = p.speed) }
+                sought = true
+            }
+        }
         restoreLast()
     }
 
@@ -158,7 +172,7 @@ class Playback(
             if (atMs != null) sought = true
         } else if (atMs != null) {
             seekTo(atMs)
-        } else if (exo.playbackState == Player.STATE_ENDED) {
+        } else if (exo.playbackState == Player.STATE_ENDED || ended || library.progress.value[book.id]?.finished == true) {
             seekTo(0)
         }
         connect()

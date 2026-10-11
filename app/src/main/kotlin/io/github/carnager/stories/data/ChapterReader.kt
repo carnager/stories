@@ -6,8 +6,9 @@ import java.nio.charset.Charset
 
 /**
  * Chapter marks from a file's own tags, which Android's metadata reader
- * doesn't give: MP4's Nero list (`chpl`) or QuickTime chapter track, and
- * ID3v2 `CHAP` frames. Reads only the boxes and frames it needs.
+ * doesn't give: MP4's Nero list (`chpl`) or QuickTime chapter track,
+ * ID3v2 `CHAP` frames, and the `CHAPTER001=` comments of FLAC, Ogg Vorbis
+ * and Opus. Reads only the boxes and frames it needs.
  */
 object ChapterReader {
     fun read(file: File): List<Mark> = runCatching {
@@ -18,6 +19,8 @@ object ChapterReader {
             when {
                 head[0] == 'I'.code.toByte() && head[1] == 'D'.code.toByte() && head[2] == '3'.code.toByte() -> id3(raf)
                 String(head, 4, 4, Charsets.ISO_8859_1) == "ftyp" -> mp4(raf)
+                String(head, 0, 4, Charsets.ISO_8859_1) == "fLaC" -> flac(raf)
+                String(head, 0, 4, Charsets.ISO_8859_1) == "OggS" -> ogg(raf)
                 else -> emptyList()
             }
         }
@@ -86,6 +89,86 @@ object ChapterReader {
     private fun int32(b: ByteArray, at: Int) =
         (b[at].toInt() and 0xff shl 24) or (b[at + 1].toInt() and 0xff shl 16) or
             (b[at + 2].toInt() and 0xff shl 8) or (b[at + 3].toInt() and 0xff)
+
+    // --- Vorbis comments: FLAC, Ogg Vorbis, Opus ---
+
+    private fun flac(raf: RandomAccessFile): List<Mark> {
+        raf.seek(4)
+        while (raf.filePointer + 4 <= raf.length()) {
+            val header = raf.readInt()
+            val last = header ushr 31 == 1
+            val type = (header ushr 24) and 0x7f
+            val length = header and 0xffffff
+            if (type == 4) return comments(ByteArray(length).also(raf::readFully), 0)
+            raf.seek(raf.filePointer + length)
+            if (last) break
+        }
+        return emptyList()
+    }
+
+    /** The comment packet is an Ogg stream's second: gathered from its pages' segments. */
+    private fun ogg(raf: RandomAccessFile): List<Mark> {
+        raf.seek(0)
+        val packet = java.io.ByteArrayOutputStream()
+        var packets = 0
+        while (raf.filePointer + 27 <= raf.length() && packets < 2) {
+            val head = ByteArray(27).also(raf::readFully)
+            if (String(head, 0, 4, Charsets.ISO_8859_1) != "OggS") break
+            val lacing = ByteArray(head[26].toInt() and 0xff).also(raf::readFully)
+            for (l in lacing) {
+                val size = l.toInt() and 0xff
+                val bytes = ByteArray(size).also(raf::readFully)
+                if (packets == 1) packet.write(bytes)
+                // A segment under 255 bytes ends its packet.
+                if (size < 255 && ++packets == 2) break
+            }
+            if (packet.size() > 1 shl 20) break
+        }
+        val body = packet.toByteArray()
+        val start = when {
+            body.size > 7 && String(body, 1, 6, Charsets.ISO_8859_1) == "vorbis" -> 7
+            body.size > 8 && String(body, 0, 8, Charsets.ISO_8859_1) == "OpusTags" -> 8
+            else -> return emptyList()
+        }
+        return comments(body, start)
+    }
+
+    private val chapterKey = Regex("^CHAPTER(\\d+)(NAME)?$")
+
+    /** `CHAPTER001=00:01:02.500` and `CHAPTER001NAME=Title`, as Matroska and ffmpeg write them. */
+    private fun comments(b: ByteArray, from: Int): List<Mark> {
+        fun le(at: Int) = (b[at].toInt() and 0xff) or (b[at + 1].toInt() and 0xff shl 8) or
+            (b[at + 2].toInt() and 0xff shl 16) or (b[at + 3].toInt() and 0xff shl 24)
+        var at = from
+        at += 4 + le(at) // vendor
+        val count = le(at)
+        at += 4
+        val starts = HashMap<String, Long>()
+        val names = HashMap<String, String>()
+        for (i in 0 until count) {
+            if (at + 4 > b.size) break
+            val length = le(at)
+            at += 4
+            if (length < 0 || at + length > b.size) break
+            val text = String(b, at, length, Charsets.UTF_8)
+            at += length
+            val match = chapterKey.find(text.substringBefore('=').uppercase()) ?: continue
+            val number = match.groupValues[1]
+            val value = text.substringAfter('=', "")
+            if (match.groupValues[2].isEmpty()) timestamp(value)?.let { starts[number] = it } else names[number] = value
+        }
+        return starts.map { (n, ms) -> Mark(names[n].orEmpty(), ms) }
+    }
+
+    /** "01:02:03.500", or without hours or fraction, in milliseconds. */
+    fun timestamp(s: String): Long? {
+        val parts = s.trim().split(':')
+        if (parts.size !in 2..3) return null
+        val seconds = parts.last().toDoubleOrNull() ?: return null
+        val minutes = parts[parts.size - 2].toLongOrNull() ?: return null
+        val hours = if (parts.size == 3) parts[0].toLongOrNull() ?: return null else 0
+        return hours * 3600_000 + minutes * 60_000 + (seconds * 1000).toLong()
+    }
 
     // --- MP4 ---
 

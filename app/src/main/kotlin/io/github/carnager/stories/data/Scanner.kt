@@ -25,7 +25,9 @@ class Scanner(private val dir: File) {
 
     suspend fun scan(roots: List<String>, onProgress: (Progress) -> Unit): List<Book> = withContext(Dispatchers.IO) {
         val cache = loadCache()
-        val found = roots.flatMap { root -> walk(File(root)) }
+        val walked = roots.flatMap { root -> walk(File(root)) }
+        val found = walked.filter { it.extension.lowercase() in audio }
+        val sheets = walked.filter { it.extension.lowercase() == "cue" }
         val done = AtomicInteger()
         val total = found.size
         val fresh = found.filter { file ->
@@ -48,14 +50,19 @@ class Scanner(private val dir: File) {
         val present = found.mapTo(HashSet()) { it.path }
         cache.keys.retainAll(present)
         saveCache(cache)
-        build(roots, Grouping.group(found.mapNotNull { cache[it.path] }))
+        // A CUE sheet beside a file names its chapters, over any the file has itself.
+        val audioByDir = found.groupBy({ it.parent.orEmpty() }, { it.path })
+        val cued = HashMap<String, List<Mark>>()
+        sheets.forEach { sheet -> cued += Cue.match(Cue.read(sheet), audioByDir[sheet.parent].orEmpty()) }
+        val tags = found.mapNotNull { f -> cache[f.path]?.let { t -> cued[f.path]?.let { t.copy(marks = it) } ?: t } }
+        build(roots, Grouping.group(tags))
     }
 
     private fun walk(root: File): List<File> {
         if (!root.isDirectory) return emptyList()
         return root.walkTopDown()
             .onEnter { !it.name.startsWith(".") || it == root }
-            .filter { it.isFile && it.extension.lowercase() in audio && !it.name.startsWith(".") }
+            .filter { it.isFile && !it.name.startsWith(".") && it.extension.lowercase().let { e -> e in audio || e == "cue" } }
             .toList()
     }
 
@@ -223,7 +230,7 @@ class Scanner(private val dir: File) {
     companion object {
         const val COVER = 640
         val audio = setOf("mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus", "flac", "wav", "mka", "webm", "mp4")
-        private val chaptered = setOf("mp3", "m4a", "m4b", "mp4", "aac")
+        private val chaptered = setOf("mp3", "m4a", "m4b", "mp4", "aac", "flac", "ogg", "oga", "opus")
         private val pictures = setOf("jpg", "jpeg", "png", "webp")
         private val preferredNames = listOf("cover", "folder", "front", "album", "book")
     }
