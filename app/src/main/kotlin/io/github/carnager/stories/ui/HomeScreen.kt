@@ -144,8 +144,16 @@ private fun NowCard(app: App, book: Book, playing: Boolean, onOpen: () -> Unit) 
             .padding(16.dp),
     ) {
         Row {
-            Box(Modifier.width(132.dp).shadow(10.dp, RoundedCornerShape(10.dp))) {
-                Cover(book, Modifier.fillMaxWidth())
+            ProgressEdge(
+                position.toFloat() / book.durationMs.coerceAtLeast(1),
+                MaterialTheme.colorScheme.primary,
+                Modifier.width(132.dp),
+                width = 2.5.dp,
+                gap = 4.dp,
+                glow = false,
+                underlay = false,
+            ) {
+                Box(Modifier.shadow(10.dp, RoundedCornerShape(10.dp))) { Cover(book, Modifier.fillMaxWidth()) }
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {

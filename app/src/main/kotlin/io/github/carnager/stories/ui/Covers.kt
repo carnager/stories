@@ -33,6 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -248,4 +253,74 @@ fun CountTab(text: String, modifier: Modifier = Modifier) {
             .background(MaterialTheme.colorScheme.primary)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
+}
+
+/**
+ * A book's progress as light along the edge of its cover: from the top's
+ * middle, clockwise, as far as it's heard. A faint track shows the rest,
+ * a dark line beneath keeps it apart from a cover of the same colour, and
+ * a soft glow makes it read at a glance. Nothing at all before it starts.
+ */
+@Composable
+fun ProgressEdge(
+    fraction: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+    corner: Dp = 10.dp,
+    width: Dp = 3.dp,
+    gap: Dp = 5.dp,
+    glow: Boolean = true,
+    underlay: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val shown by androidx.compose.animation.core.animateFloatAsState(fraction.coerceIn(0f, 1f), androidx.compose.animation.core.tween(700), label = "edge")
+    Box(
+        modifier
+            .padding(gap + width)
+            .drawWithContent {
+                drawContent()
+                if (shown <= 0f) return@drawWithContent
+                val inset = -(gap + width / 2).toPx()
+                val left = inset
+                val top = inset
+                val right = size.width - inset
+                val bottom = size.height - inset
+                val r = (corner + gap + width / 2).toPx()
+                val edge = edgePath(left, top, right, bottom, r)
+                val stroke = width.toPx()
+                if (underlay) drawPath(edge, Color.Black.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke + 2.dp.toPx()))
+                drawPath(edge, color.copy(alpha = 0.18f), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                val measure = androidx.compose.ui.graphics.PathMeasure().apply { setPath(edge, false) }
+                val lit = androidx.compose.ui.graphics.Path()
+                measure.getSegment(0f, measure.length * shown, lit, true)
+                if (glow) {
+                    drawIntoCanvas { canvas ->
+                        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            style = android.graphics.Paint.Style.STROKE
+                            strokeWidth = stroke * 2.5f
+                            strokeCap = android.graphics.Paint.Cap.ROUND
+                            this.color = color.copy(alpha = 0.55f).toArgb()
+                            maskFilter = android.graphics.BlurMaskFilter(stroke * 2.5f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                        }
+                        canvas.nativeCanvas.drawPath(lit.asAndroidPath(), paint)
+                    }
+                }
+                drawPath(lit, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            },
+    ) { content() }
+}
+
+/** A rounded rectangle's outline, begun at the top's middle and going clockwise. */
+private fun edgePath(left: Float, top: Float, right: Float, bottom: Float, r: Float) = androidx.compose.ui.graphics.Path().apply {
+    val cx = (left + right) / 2
+    moveTo(cx, top)
+    lineTo(right - r, top)
+    arcTo(androidx.compose.ui.geometry.Rect(right - 2 * r, top, right, top + 2 * r), -90f, 90f, false)
+    lineTo(right, bottom - r)
+    arcTo(androidx.compose.ui.geometry.Rect(right - 2 * r, bottom - 2 * r, right, bottom), 0f, 90f, false)
+    lineTo(left + r, bottom)
+    arcTo(androidx.compose.ui.geometry.Rect(left, bottom - 2 * r, left + 2 * r, bottom), 90f, 90f, false)
+    lineTo(left, top + r)
+    arcTo(androidx.compose.ui.geometry.Rect(left, top, left + 2 * r, top + 2 * r), 180f, 90f, false)
+    lineTo(cx, top)
 }

@@ -197,13 +197,18 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
                     val side = minOf(maxWidth, 380.dp)
                     // The cover breathes a little: full while playing, a touch smaller paused.
                     val scale by androidx.compose.animation.core.animateFloatAsState(if (state.playing) 1f else 0.92f, tween(450), label = "scale")
-                    Box(
-                        Modifier
-                            .width(side)
-                            .graphicsLayer { scaleX = scale; scaleY = scale }
-                            .shadow(30.dp, RoundedCornerShape(18.dp)),
+                    // Lit along its edge as far as the whole book is heard.
+                    ProgressEdge(
+                        position.toFloat() / book.durationMs.coerceAtLeast(1),
+                        accent,
+                        Modifier.width(side).graphicsLayer { scaleX = scale; scaleY = scale },
+                        corner = 18.dp,
+                        width = 3.dp,
+                        gap = 7.dp,
                     ) {
-                        Cover(book, Modifier.fillMaxWidth(), corner = 18.dp)
+                        Box(Modifier.shadow(30.dp, RoundedCornerShape(18.dp))) {
+                            Cover(book, Modifier.fillMaxWidth(), corner = 18.dp)
+                        }
                     }
                 }
                 Spacer(Modifier.weight(0.25f))
