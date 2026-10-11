@@ -3,6 +3,12 @@
 Audiobook player for Android. Point it at a folder; each subfolder is a book,
 a folder of books is a series.
 
+<p>
+  <img src="screenshots/listening.png" width="260" alt="Listening">
+  <img src="screenshots/books.png" width="260" alt="Books">
+  <img src="screenshots/player.png" width="260" alt="Player">
+</p>
+
 - Remembers the position of every book, separately.
 - Covers show what's new, in progress or finished.
 - Reads tags and chapters (M4B, MP3, FLAC, Ogg, Opus, CUE). Disc folders
