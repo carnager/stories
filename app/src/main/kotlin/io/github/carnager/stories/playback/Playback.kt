@@ -134,11 +134,10 @@ class Playback(
         load(book, last.positionMs)
     }
 
-    private fun load(book: Book, atMs: Long) {
-        this.book = book
-        ended = false
-        val cover = book.cover?.let { Uri.fromFile(File(it)) }
-        val items = book.tracks.mapIndexed { i, track ->
+    /** A book's files as the player's items, each carrying the book's name and cover. */
+    fun itemsOf(book: Book): List<MediaItem> {
+        val cover = book.cover?.let { CoverProvider.uri(context, it) }
+        return book.tracks.mapIndexed { i, track ->
             MediaItem.Builder()
                 .setMediaId("${book.id}/$i")
                 .setUri(Uri.fromFile(File(track.path)))
@@ -153,8 +152,30 @@ class Playback(
                 )
                 .build()
         }
+    }
+
+    /**
+     * Takes up a book whose items someone else -- a car, a watch -- is about
+     * to give the player: where to start, at its speed.
+     */
+    fun adopt(book: Book): Pair<List<MediaItem>, Pair<Int, Long>> {
+        save(persist = true)
+        val p = library.progress.value[book.id]
+        this.book = book
+        ended = false
+        pausedAt = 0
+        sought = true
+        val speed = p?.speed ?: 1f
+        exo.setPlaybackSpeed(speed)
+        _state.update { it.copy(bookId = book.id, speed = speed, error = null) }
+        return itemsOf(book) to book.locate(if (p == null || p.finished) 0 else p.positionMs)
+    }
+
+    private fun load(book: Book, atMs: Long) {
+        this.book = book
+        ended = false
         val (index, offset) = book.locate(atMs)
-        exo.setMediaItems(items, index, offset)
+        exo.setMediaItems(itemsOf(book), index, offset)
         exo.prepare()
         val speed = library.progress.value[book.id]?.speed ?: 1f
         exo.setPlaybackSpeed(speed)
