@@ -20,7 +20,7 @@ a folder of books is a series.
   (Syncthing, Nextcloud) carry them to other devices.
 - Sleep timer with adjustable fade-out (shake to extend), per-book speed,
   bookmarks, widget, Android Auto.
-- Optional: delete finished books from the phone, with their covers and
+- Optional: delete books from the phone, with their covers and
   position files.
 
 Needs Android 11+ and all-files access.
