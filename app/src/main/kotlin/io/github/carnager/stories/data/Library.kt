@@ -27,7 +27,7 @@ sealed interface Entry {
  * Everything here is a flow the screens watch; writes go to disk off the
  * main thread, newest last.
  */
-class Library(dir: File, private val settings: SettingsStore, private val scope: CoroutineScope) {
+class Library(private val dir: File, private val settings: SettingsStore, private val scope: CoroutineScope) {
     private val store = Store(dir)
     private val scanner = Scanner(dir)
     private val writes = Mutex()
@@ -186,6 +186,28 @@ class Library(dir: File, private val settings: SettingsStore, private val scope:
     }
 
     fun editOf(book: Book): Edit? = _overrides.value.edits[book.id]
+
+    /** After books were deleted: what was kept of them goes too -- place, bookmarks, corrections, cover. */
+    fun forget(books: List<Book>) {
+        val ids = books.mapTo(HashSet()) { it.id }
+        val drafts = books.mapTo(HashSet()) { it.draft }
+        _progress.update { all -> all - ids }
+        _bookmarks.update { all -> all.filter { it.bookId !in ids } }
+        _overrides.update { o ->
+            o.copy(
+                edits = o.edits - ids,
+                perFile = o.perFile - drafts,
+                merges = o.merges.filterKeys { key -> drafts.none { it.substringAfter('#') == key } }
+                    .mapValues { (_, parts) -> parts - drafts },
+            )
+        }
+        books.forEach { File(dir, "covers/${it.id}.jpg").delete() }
+        val o = _overrides.value
+        persistProgress()
+        persistBookmarks()
+        scope.launch(Dispatchers.IO) { writes.withLock { store.saveOverrides(o) } }
+        rescan()
+    }
 
     /**
      * Where Smart AudioBook Player left each book, from the position file it

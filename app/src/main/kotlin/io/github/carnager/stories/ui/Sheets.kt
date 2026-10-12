@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
@@ -194,6 +195,9 @@ fun HoldSheet(app: App, nav: Nav, hold: Hold, onDismiss: () -> Unit) {
                 if (status != Status.New) ActionRow(Icons.Default.RestartAlt, "Mark as new") { app.library.markFinished(listOf(book), false); onDismiss() }
                 ActionRow(Icons.Default.Info, "Details and chapters") { nav.book = book.id; onDismiss() }
                 ActionRow(Icons.Default.Add, "Join with other books…") { onDismiss(); startJoining(app, nav, book) }
+                if (app.settings.value.allowDelete) {
+                    ActionRow(Icons.Default.Delete, "Delete from phone…", danger = true) { onDismiss(); nav.deleting = book.title to listOf(book) }
+                }
             }
             is Hold.OnFolder -> {
                 val books = hold.entry.books
@@ -204,20 +208,23 @@ fun HoldSheet(app: App, nav: Nav, hold: Hold, onDismiss: () -> Unit) {
                 }
                 ActionRow(Icons.Default.Check, "Mark all as finished") { app.library.markFinished(books, true); onDismiss() }
                 ActionRow(Icons.Default.Replay, "Mark all as new") { app.library.markFinished(books, false); onDismiss() }
+                if (app.settings.value.allowDelete) {
+                    ActionRow(Icons.Default.Delete, "Delete all from phone…", danger = true) { onDismiss(); nav.deleting = hold.entry.name to books }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun ActionRow(icon: ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = LocalTones.current.secondary)
+        Icon(icon, null, tint = if (danger) MaterialTheme.colorScheme.error else LocalTones.current.secondary)
         Spacer(Modifier.width(18.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
     }
 }
 

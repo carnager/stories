@@ -58,6 +58,12 @@ fun BookMenu(app: App, nav: Nav, book: Book) {
             if (book.tracks.size > 1 && !book.joined && !book.fromDiscs) {
                 DropdownMenuItem(text = { Text("Make each file a book") }, onClick = { open = false; nav.book = null; app.library.cutPerFile(book) })
             }
+            if (app.settings.value.allowDelete) {
+                DropdownMenuItem(
+                    text = { Text("Delete from phone…", color = MaterialTheme.colorScheme.error) },
+                    onClick = { open = false; nav.deleting = book.title to listOf(book) },
+                )
+            }
             if (book.single && app.library.isCut(book.folder)) {
                 DropdownMenuItem(
                     text = { Text("Join the folder's files back into one book") },
@@ -109,4 +115,49 @@ private fun EditDialog(app: App, book: Book, onDone: () -> Unit) {
 @Composable
 private fun Field(label: String, value: String, onChange: (String) -> Unit) {
     OutlinedTextField(value, onChange, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+}
+
+/**
+ * The question before deleting: what goes, how much, and that it can't be
+ * undone. Only a yes deletes; the files go, then what Stories kept of them.
+ */
+@Composable
+fun DeleteDialog(app: App, name: String, books: List<Book>, onDeleted: () -> Unit, onDone: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val size by androidx.compose.runtime.produceState<Pair<Int, Long>?>(null, books) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { io.github.carnager.stories.data.Deleter.measure(books) }
+    }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(if (books.size == 1) "Delete \u201C$name\u201D?" else "Delete ${books.size} books in \u201C$name\u201D?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    size?.let { (files, bytes) ->
+                        val amount = android.text.format.Formatter.formatShortFileSize(context, bytes)
+                        if (files == 1) "1 file, $amount, is deleted from the phone." else "$files files, $amount, are deleted from the phone."
+                    }
+                        ?: "Counting the files…",
+                )
+                Text(
+                    "With them go covers, CUE sheets and position files beside them, empty folders, and the places and bookmarks Stories kept. This can't be undone.",
+                    style = MaterialTheme.typography.bodySmall, color = LocalTones.current.muted,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onDone()
+                onDeleted()
+                app.deleteBooks(books) { result ->
+                    val freed = android.text.format.Formatter.formatShortFileSize(context, result.bytes)
+                    val files = if (result.deleted == 1) "1 file" else "${result.deleted} files"
+                    val text = if (result.failed.isEmpty()) "Deleted $files, $freed"
+                    else "Deleted $files; ${result.failed.size} could not be deleted"
+                    android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
 }

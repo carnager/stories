@@ -18,8 +18,10 @@ a folder of books is a series.
 - Imports positions from Smart AudioBook Player (`position.sabp.dat`).
 - Optional: saves positions next to the books, so synced folders
   (Syncthing, Nextcloud) carry them to other devices.
-- Sleep timer (shake to extend), per-book speed, bookmarks, widget,
-  Android Auto.
+- Sleep timer with adjustable fade-out (shake to extend), per-book speed,
+  bookmarks, widget, Android Auto.
+- Optional: delete finished books from the phone, with their covers and
+  position files.
 
 Needs Android 11+ and all-files access.
 

@@ -21,6 +21,8 @@ data class Settings(
     val dynamicColor: Boolean = false,
     val grid: Boolean = true,
     val shareInFolders: Boolean = false,
+    /** Books may be deleted from the phone, from their menus. */
+    val allowDelete: Boolean = false,
 )
 
 class SettingsStore(context: Context) {
@@ -43,6 +45,7 @@ class SettingsStore(context: Context) {
         dynamicColor = prefs.getBoolean("dynamic", false),
         grid = prefs.getBoolean("grid", true),
         shareInFolders = prefs.getBoolean("share", false),
+        allowDelete = prefs.getBoolean("delete", false),
     )
 
     fun update(change: (Settings) -> Settings) {
@@ -61,6 +64,7 @@ class SettingsStore(context: Context) {
             .putBoolean("dynamic", s.dynamicColor)
             .putBoolean("grid", s.grid)
             .putBoolean("share", s.shareInFolders)
+            .putBoolean("delete", s.allowDelete)
             .apply()
         _state.value = s
     }

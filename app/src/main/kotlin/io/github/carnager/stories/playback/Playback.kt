@@ -214,6 +214,16 @@ class Playback(
         player.play()
     }
 
+    /** Lets go of the book: stopped, emptied, nothing kept -- it is being deleted. */
+    fun unload() {
+        sleep.cancel()
+        exo.stop()
+        exo.clearMediaItems()
+        book = null
+        ended = false
+        _state.value = PlayState()
+    }
+
     fun toggle() {
         if (exo.isPlaying) player.pause() else book?.let { play(it) }
     }

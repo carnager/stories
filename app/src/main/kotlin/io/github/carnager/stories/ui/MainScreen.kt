@@ -67,6 +67,9 @@ class Nav {
     var settings by mutableStateOf(false)
     var holding by mutableStateOf<Hold?>(null)
 
+    /** Books asked to be deleted, with what to call them, awaiting the yes. */
+    var deleting by mutableStateOf<Pair<String, List<Book>>?>(null)
+
     /** Books picked to be joined into one; empty when not picking. */
     val joining = mutableStateListOf<String>()
 }
@@ -147,6 +150,9 @@ fun MainScreen(app: App, nav: Nav) {
             SettingsScreen(app) { nav.settings = false }
         }
         nav.holding?.let { HoldSheet(app, nav, it) { nav.holding = null } }
+        nav.deleting?.let { (name, books) ->
+            DeleteDialog(app, name, books, onDeleted = { if (nav.book in books.map { it.id }) nav.book = null }) { nav.deleting = null }
+        }
     }
 }
 
