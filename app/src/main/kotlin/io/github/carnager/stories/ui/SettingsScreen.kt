@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -132,6 +133,16 @@ fun SettingsScreen(app: App, onClose: () -> Unit) {
             Toggle("Skip silence", "Leaves out long quiet stretches", settings.skipSilence) { v -> app.settings.update { it.copy(skipSilence = v) } }
 
             SectionLabel("Sleep")
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
+                Text("Fade out", style = MaterialTheme.typography.bodyLarge)
+                Text("How long it grows quieter before it stops", style = MaterialTheme.typography.bodySmall, color = LocalTones.current.muted)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(10, 30, 60, 120, 300).forEach { v ->
+                        Choice(skipLabel(v), settings.sleepFadeSeconds == v) { app.settings.update { it.copy(sleepFadeSeconds = v) } }
+                    }
+                }
+            }
             Toggle("Shake to start over", "Also brings it back for a minute after it stopped", settings.shakeToExtend) { v ->
                 app.settings.update { it.copy(shakeToExtend = v) }
             }

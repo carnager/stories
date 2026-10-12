@@ -15,6 +15,8 @@ data class Settings(
     val skipSilence: Boolean = false,
     val shakeToExtend: Boolean = true,
     val sleepMinutes: Int = 30,
+    /** How long the sleep timer takes to fade out, at its end. */
+    val sleepFadeSeconds: Int = 30,
     val theme: String = "system",
     val dynamicColor: Boolean = false,
     val grid: Boolean = true,
@@ -36,6 +38,7 @@ class SettingsStore(context: Context) {
         skipSilence = prefs.getBoolean("skipSilence", false),
         shakeToExtend = prefs.getBoolean("shake", true),
         sleepMinutes = prefs.getInt("sleep", 30),
+        sleepFadeSeconds = prefs.getInt("fade", 30),
         theme = prefs.getString("theme", "system")!!,
         dynamicColor = prefs.getBoolean("dynamic", false),
         grid = prefs.getBoolean("grid", true),
@@ -53,6 +56,7 @@ class SettingsStore(context: Context) {
             .putBoolean("skipSilence", s.skipSilence)
             .putBoolean("shake", s.shakeToExtend)
             .putInt("sleep", s.sleepMinutes)
+            .putInt("fade", s.sleepFadeSeconds)
             .putString("theme", s.theme)
             .putBoolean("dynamic", s.dynamicColor)
             .putBoolean("grid", s.grid)

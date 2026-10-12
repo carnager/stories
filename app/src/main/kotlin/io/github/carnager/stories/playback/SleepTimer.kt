@@ -22,10 +22,10 @@ import kotlin.math.sqrt
 data class Sleep(val remainingMs: Long, val totalMs: Long, val endOfChapter: Boolean)
 
 /**
- * Stops playing after a while, fading out over the last seconds. It only
- * counts down while playing. A shake starts it over -- also for a minute
- * after it stopped, which then plays on: the half-asleep way to say
- * "not yet".
+ * Stops playing after a while, fading out over its last stretch, as long
+ * as set. It only counts down while playing. A shake starts it over --
+ * also for a minute after it stopped, which then plays on: the
+ * half-asleep way to say "not yet".
  */
 class SleepTimer(
     private val context: Context,
@@ -97,10 +97,21 @@ class SleepTimer(
                     expire()
                     break
                 }
-                playback.exo.volume = if (remaining < FADE) (remaining.toFloat() / FADE).coerceIn(0.05f, 1f) else 1f
+                playback.exo.volume = fade(remaining)
                 _state.value = current.copy(remainingMs = remaining)
             }
         }
+    }
+
+    /**
+     * The volume while fading: along a curve, as the ear hears loudness, so
+     * it seems to fall evenly rather than all at the end.
+     */
+    private fun fade(remaining: Long): Float {
+        val length = settings.value.sleepFadeSeconds * 1000L
+        if (length <= 0 || remaining >= length) return 1f
+        val f = remaining.toFloat() / length
+        return (f * f).coerceIn(0.02f, 1f)
     }
 
     private fun expire() {
@@ -175,7 +186,6 @@ class SleepTimer(
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private companion object {
-        const val FADE = 12_000L
         const val GRACE = 60_000L
     }
 }

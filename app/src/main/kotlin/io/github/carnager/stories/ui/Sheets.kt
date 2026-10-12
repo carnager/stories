@@ -120,7 +120,7 @@ fun SleepSheet(app: App, onDismiss: () -> Unit) {
         SheetTitle(
             "Sleep timer",
             sleep?.let { if (it.endOfChapter) "Stops at the chapter's end" else "Stops in ${clock(it.remainingMs)}" }
-                ?: if (settings.shakeToExtend) "Shake the phone to start it over" else "Counts while playing",
+                ?: ("Fades out over ${skipLabel(settings.sleepFadeSeconds)}" + if (settings.shakeToExtend) " · shake to start over" else ""),
         )
         FlowRow(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(5, 10, 15, 20, 30, 45, 60, 90).forEach { m ->
