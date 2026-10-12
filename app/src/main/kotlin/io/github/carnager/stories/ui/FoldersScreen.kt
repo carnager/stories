@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -120,7 +119,6 @@ private fun FolderList(app: App, nav: Nav) {
                         is Entry.Item -> BookTile(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) }, picked(entry))
                     }
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) { Legend() }
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -130,7 +128,6 @@ private fun FolderList(app: App, nav: Nav) {
                         is Entry.Item -> BookRow(entry.book, entry.name, progress[entry.book.id], entry.book.id == state.bookId, { open(entry) }, { hold(entry) }, picked(entry))
                     }
                 }
-                item { Legend() }
             }
         }
     }
@@ -204,15 +201,4 @@ private fun Breadcrumbs(nav: Nav) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(16.dp), tint = LocalTones.current.faint)
         }
     }
-}
-
-/** What the marks on the covers mean, once, quietly, at the foot. */
-@Composable
-private fun Legend() {
-    Text(
-        "Dot: new  ·  bar: how far  ·  tick: finished  ·  hold for more",
-        style = MaterialTheme.typography.bodySmall,
-        color = LocalTones.current.faint,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
-    )
 }
