@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -120,6 +121,9 @@ fun ThinSlider(
     enabled: Boolean = true,
 ) {
     var width by remember { mutableIntStateOf(1) }
+    // The gestures outlive a recomposition; they must call what's passed now, not what was passed first.
+    val change by rememberUpdatedState(onChange)
+    val done by rememberUpdatedState(onDone)
     Box(
         modifier
             .fillMaxWidth()
@@ -128,17 +132,17 @@ fun ThinSlider(
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
-                    onChange((offset.x / width).coerceIn(0f, 1f))
-                    onDone()
+                    change((offset.x / width).coerceIn(0f, 1f))
+                    done()
                 }
             }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectHorizontalDragGestures(
-                    onDragStart = { onChange((it.x / width).coerceIn(0f, 1f)) },
-                    onDragEnd = onDone,
-                    onDragCancel = onDone,
-                ) { change, _ -> onChange((change.position.x / width).coerceIn(0f, 1f)) }
+                    onDragStart = { change((it.x / width).coerceIn(0f, 1f)) },
+                    onDragEnd = { done() },
+                    onDragCancel = { done() },
+                ) { pointer, _ -> change((pointer.position.x / width).coerceIn(0f, 1f)) }
             },
         contentAlignment = Alignment.CenterStart,
     ) {

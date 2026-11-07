@@ -258,11 +258,14 @@ fun PlayerScreen(app: App, onClose: () -> Unit) {
  * at this speed.
  */
 @Composable
-private fun ChapterBar(app: App, book: Book, position: Long, chapterIndex: Int, accent: Color, text: Color, soft: Color) {
+private fun ChapterBar(app: App, book: Book, position: Long, playingIndex: Int, accent: Color, text: Color, soft: Color) {
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    // The chapter taken hold of stays the bar's, though playing runs on into the next meanwhile.
+    var held by remember { mutableStateOf(playingIndex) }
+    val chapterIndex = if (dragging != null) held else playingIndex
     val chapter = book.chapters.getOrNull(chapterIndex)
     val start = chapter?.startMs ?: 0
     val length = (chapter?.durationMs ?: book.durationMs).coerceAtLeast(1)
-    var dragging by remember { mutableStateOf<Float?>(null) }
     val fraction = dragging ?: ((position - start).toFloat() / length)
     val speed = app.playback.state.collectAsState().value.speed
     ThinSlider(
@@ -270,7 +273,7 @@ private fun ChapterBar(app: App, book: Book, position: Long, chapterIndex: Int, 
         fill = accent,
         track = text.copy(alpha = 0.16f),
         thumb = text,
-        onChange = { dragging = it },
+        onChange = { if (dragging == null) held = playingIndex; dragging = it },
         onDone = {
             dragging?.let { app.playback.seekTo(start + (it * length).toLong()) }
             dragging = null
