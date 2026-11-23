@@ -1,5 +1,8 @@
 package io.github.carnager.stories.data
 
+/** The folder the server's books show under. Not a real path. */
+const val SERVER_ROOT = "/Server"
+
 /** A chapter inside one file, from its own chapter marks. */
 data class Mark(val title: String, val startMs: Long)
 
@@ -44,6 +47,9 @@ data class Book(
     val edited: Boolean = false,
 ) {
     private val key: String get() = draft.substringAfter('#', "")
+
+    /** Lives on a storiesd server: its paths name no file on the phone. */
+    val onServer: Boolean get() = folder == SERVER_ROOT || folder.startsWith("$SERVER_ROOT/")
 
     /** Joined by hand from other books. */
     val joined: Boolean get() = key.startsWith("merge:")

@@ -84,4 +84,6 @@ dependencies {
     // The player's colours, taken from the cover.
     implementation("androidx.palette:palette:1.0.0")
     testImplementation("junit:junit:4.13.2")
+    // Android's org.json is only a stub in unit tests.
+    testImplementation("org.json:json:20250517")
 }

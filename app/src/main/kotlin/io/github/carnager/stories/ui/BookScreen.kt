@@ -141,6 +141,7 @@ fun BookScreen(app: App, nav: Nav, book: Book) {
                         Pill("Mark finished", Icons.Default.Check, onClick = { app.library.markFinished(listOf(book), true) })
                     }
                 }
+                KeepOnDevice(app, book)
             }
             if (marks.isNotEmpty()) {
                 item { SectionLabel("Bookmarks") }

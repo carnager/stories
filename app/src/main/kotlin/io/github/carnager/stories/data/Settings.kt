@@ -23,6 +23,8 @@ data class Settings(
     val shareInFolders: Boolean = false,
     /** Books may be deleted from the phone, from their menus. */
     val allowDelete: Boolean = false,
+    /** Most that books kept from a server may take on the device, in GB; 0 for no limit. */
+    val cacheLimitGb: Int = 0,
 )
 
 class SettingsStore(context: Context) {
@@ -46,6 +48,7 @@ class SettingsStore(context: Context) {
         grid = prefs.getBoolean("grid", true),
         shareInFolders = prefs.getBoolean("share", false),
         allowDelete = prefs.getBoolean("delete", false),
+        cacheLimitGb = prefs.getInt("cacheLimit", 0),
     )
 
     fun update(change: (Settings) -> Settings) {
@@ -65,6 +68,7 @@ class SettingsStore(context: Context) {
             .putBoolean("grid", s.grid)
             .putBoolean("share", s.shareInFolders)
             .putBoolean("delete", s.allowDelete)
+            .putInt("cacheLimit", s.cacheLimitGb)
             .apply()
         _state.value = s
     }

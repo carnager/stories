@@ -121,7 +121,7 @@ class Scanner(private val dir: File) {
                 tracks = draft.files.map { f ->
                     Track(f.path, f.title.ifBlank { f.name.substringBeforeLast('.') }, f.durationMs, f.marks)
                 },
-                cover = cover(id, draft),
+                cover = cover(id, draft, drafts),
                 fingerprint = Grouping.fingerprint(draft.files),
                 draft = draft.id,
             )
@@ -132,18 +132,11 @@ class Scanner(private val dir: File) {
      * The book's picture: an image in its folder (when the folder is its
      * alone), else the first embedded one, saved small once.
      */
-    private fun cover(id: String, draft: Draft): String? {
+    private fun cover(id: String, draft: Draft, drafts: List<Draft>): String? {
         val saved = File(coverDir, "$id.jpg")
-        if (draft.key.isEmpty()) {
-            val images = File(draft.folder).listFiles { f -> f.isFile && f.extension.lowercase() in pictures }.orEmpty()
-            val preferred = images.sortedWith(compareBy<File> { f ->
-                val name = f.nameWithoutExtension.lowercase()
-                preferredNames.indexOfFirst { name.startsWith(it) }.let { if (it < 0) preferredNames.size else it }
-            }.thenBy { it.name })
-            preferred.firstOrNull()?.let { image ->
-                if (!saved.exists() || saved.lastModified() < image.lastModified()) shrink(BitmapFactory.decodeFile(image.path, sampled(image.path)), saved)
-                if (saved.exists()) return saved.path
-            }
+        Grouping.coverFolders(draft, drafts).firstNotNullOfOrNull(::folderImage)?.let { image ->
+            if (!saved.exists() || saved.lastModified() < image.lastModified()) shrink(BitmapFactory.decodeFile(image.path, sampled(image.path)), saved)
+            if (saved.exists()) return saved.path
         }
         if (saved.exists()) return saved.path
         val withPicture = draft.files.firstOrNull { it.hasPicture } ?: return null
@@ -163,6 +156,14 @@ class Scanner(private val dir: File) {
             retriever.release()
         }
     }
+
+    private fun folderImage(folder: String): File? =
+        File(folder).listFiles { f -> f.isFile && f.extension.lowercase() in pictures }.orEmpty()
+            .sortedWith(compareBy<File> { f ->
+                val name = f.nameWithoutExtension.lowercase()
+                preferredNames.indexOfFirst { name.startsWith(it) }.let { if (it < 0) preferredNames.size else it }
+            }.thenBy { it.name })
+            .firstOrNull()
 
     private fun sampled(path: String) = BitmapFactory.Options().apply {
         inJustDecodeBounds = true

@@ -158,6 +158,21 @@ object Grouping {
         return result
     }
 
+    /**
+     * Where the book's picture may be, best first. A folder counts only when
+     * it is the book's alone: a book joined from discs looks in its parent,
+     * then in the disc folders. One joined by hand may share its folder with
+     * a series, so it keeps to what its files hold.
+     */
+    fun coverFolders(draft: Draft, all: List<Draft>): List<String> {
+        if (draft.key.startsWith("file:") || draft.key.startsWith("merge:")) return emptyList()
+        val dirs = draft.files.map { it.dir }.distinct()
+        if (dirs.size < 2) return if (draft.key.isEmpty()) listOf(draft.folder) else emptyList()
+        if (dirs.any { !it.startsWith(draft.folder + "/") }) return emptyList()
+        if (all.any { it !== draft && it.folder == draft.folder }) return emptyList()
+        return listOf(draft.folder) + dirs.sortedWith(NaturalOrder)
+    }
+
     private fun albumOf(draft: Draft): String =
         draft.files.map { normal(it.album) }.filter { it.isNotEmpty() }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
 

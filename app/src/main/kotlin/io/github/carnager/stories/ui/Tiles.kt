@@ -60,6 +60,7 @@ fun BookTile(book: Book, name: String, progress: Progress?, playing: Boolean, on
     ) {
         Box {
             StatusCover(book, progress, Modifier.fillMaxWidth(), playing = playing)
+            StreamMark(book, Modifier.align(Alignment.TopEnd).padding(6.dp))
             if (picked != null) PickMark(picked, Modifier.align(Alignment.TopStart).padding(6.dp))
         }
         Spacer(Modifier.height(8.dp))
@@ -84,6 +85,7 @@ fun BookRow(book: Book, name: String, progress: Progress?, playing: Boolean, onO
     ) {
         Box {
             StatusCover(book, progress, Modifier.size(60.dp), corner = 8.dp, playing = playing)
+            StreamMark(book, Modifier.align(Alignment.TopEnd).padding(3.dp))
             if (picked != null) PickMark(picked, Modifier.align(Alignment.TopStart).padding(3.dp))
         }
         Spacer(Modifier.width(14.dp))

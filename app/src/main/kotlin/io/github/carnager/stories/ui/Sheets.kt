@@ -194,9 +194,11 @@ fun HoldSheet(app: App, nav: Nav, hold: Hold, onDismiss: () -> Unit) {
                 if (status != Status.Finished) ActionRow(Icons.Default.Check, "Mark as finished") { app.library.markFinished(listOf(book), true); onDismiss() }
                 if (status != Status.New) ActionRow(Icons.Default.RestartAlt, "Mark as new") { app.library.markFinished(listOf(book), false); onDismiss() }
                 ActionRow(Icons.Default.Info, "Details and chapters") { nav.book = book.id; onDismiss() }
-                ActionRow(Icons.Default.Add, "Join with other books…") { onDismiss(); startJoining(app, nav, book) }
-                if (app.settings.value.allowDelete) {
-                    ActionRow(Icons.Default.Delete, "Delete from phone…", danger = true) { onDismiss(); nav.deleting = book.title to listOf(book) }
+                if (!book.onServer) {
+                    ActionRow(Icons.Default.Add, "Join with other books…") { onDismiss(); startJoining(app, nav, book) }
+                    if (app.settings.value.allowDelete) {
+                        ActionRow(Icons.Default.Delete, "Delete from phone…", danger = true) { onDismiss(); nav.deleting = book.title to listOf(book) }
+                    }
                 }
             }
             is Hold.OnFolder -> {
@@ -208,8 +210,9 @@ fun HoldSheet(app: App, nav: Nav, hold: Hold, onDismiss: () -> Unit) {
                 }
                 ActionRow(Icons.Default.Check, "Mark all as finished") { app.library.markFinished(books, true); onDismiss() }
                 ActionRow(Icons.Default.Replay, "Mark all as new") { app.library.markFinished(books, false); onDismiss() }
-                if (app.settings.value.allowDelete) {
-                    ActionRow(Icons.Default.Delete, "Delete all from phone…", danger = true) { onDismiss(); nav.deleting = hold.entry.name to books }
+                val local = books.filterNot { it.onServer }
+                if (app.settings.value.allowDelete && local.isNotEmpty()) {
+                    ActionRow(Icons.Default.Delete, "Delete all from phone…", danger = true) { onDismiss(); nav.deleting = hold.entry.name to local }
                 }
             }
         }

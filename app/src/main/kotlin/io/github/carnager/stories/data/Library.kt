@@ -49,6 +49,10 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
     private val _scanning = MutableStateFlow<Scanner.Progress?>(null)
     val scanning: StateFlow<Scanner.Progress?> = _scanning.asStateFlow()
 
+    // The books in the folders on this device, and those on a server. Only the first are saved here.
+    @Volatile private var localBooks: List<Book> = _books.value
+    @Volatile private var remoteBooks: List<Book> = emptyList()
+
     @Volatile private var index = FolderIndex(_books.value, settings.value.roots)
     private var scanJob: Job? = null
 
@@ -71,11 +75,10 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
                     val before = byId
                     val found = scanner.scan(roots, _overrides.value) { _scanning.value = it }
                         .sortedWith { a, b -> NaturalOrder.compare(a.folder + "/" + a.title, b.folder + "/" + b.title) }
-                    val moved = adoptMoved(found, before)
+                    val moved = adoptMoved(found + remoteBooks, before)
                     importFolderPositions(found)
-                    index = FolderIndex(found, roots)
-                    byId = found.associateBy { it.id }
-                    _books.value = found
+                    localBooks = found
+                    publish()
                     store.saveLibrary(found)
                     if (moved.isNotEmpty()) _replaced.tryEmit(moved)
                 } while (again)
@@ -83,6 +86,27 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
                 _scanning.value = null
             }
         }
+    }
+
+    private fun allRoots() = settings.value.roots + if (remoteBooks.isEmpty()) emptyList() else listOf(SERVER_ROOT)
+
+    @Synchronized
+    private fun publish() {
+        val all = localBooks + remoteBooks
+        index = FolderIndex(all, allRoots())
+        byId = all.associateBy { it.id }
+        _books.value = all
+    }
+
+    /** The books in this device's folders, the same list until a scan changes them. */
+    fun localBooks(): List<Book> = localBooks
+
+    fun serverBooks(): List<Book> = remoteBooks
+
+    /** The server's books to show beside the local ones. */
+    fun setRemote(books: List<Book>) {
+        remoteBooks = books
+        publish()
     }
 
     /**
@@ -178,10 +202,9 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
         _overrides.update { it.copy(edits = it.edits + (book.id to edit)) }
         val o = _overrides.value
         val changed = book.with(edit)
-        _books.update { all -> all.map { if (it.id == book.id) changed else it } }
-        byId = _books.value.associateBy { it.id }
-        index = FolderIndex(_books.value, settings.value.roots)
-        val snapshot = _books.value
+        localBooks = localBooks.map { if (it.id == book.id) changed else it }
+        publish()
+        val snapshot = localBooks
         scope.launch(Dispatchers.IO) { writes.withLock { store.saveOverrides(o); store.saveLibrary(snapshot) } }
     }
 
@@ -260,7 +283,7 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
     /** Into the book's folder, for other devices, when the setting asks for it. */
     private fun share(ids: Collection<String>) {
         if (!settings.value.shareInFolders) return
-        val books = ids.mapNotNull { id -> book(id)?.let { it to _progress.value[id] } }
+        val books = ids.mapNotNull { id -> book(id)?.takeUnless { it.onServer }?.let { it to _progress.value[id] } }
         scope.launch(Dispatchers.IO) {
             books.forEach { (book, p) -> if (p != null) FolderPositions.write(book, p) }
         }
@@ -270,14 +293,15 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
 
     /** The folders to open, from the top, to see this book listed. */
     fun pathTo(book: Book): List<String> {
-        val root = settings.value.roots.map { it.trimEnd('/') }
+        val roots = allRoots()
+        val root = roots.map { it.trimEnd('/') }
             .filter { book.folder == it || book.folder.startsWith("$it/") }.maxByOrNull { it.length } ?: return emptyList()
         val listed = index.listedIn(book)
         val steps = ArrayList<String>()
         var dir = listed
         while (dir.length > root.length) { steps.add(0, dir); dir = dir.substringBeforeLast('/') }
         // Several chosen folders: their list is the top, so the root itself is a step.
-        if (settings.value.roots.size > 1) steps.add(0, root)
+        if (roots.size > 1) steps.add(0, root)
         return steps
     }
     fun folderBooks(folder: String): List<Book> = index.booksUnder(folder)
@@ -317,6 +341,24 @@ class Library(private val dir: File, private val settings: SettingsStore, privat
         persistProgress()
         share(books.map { it.id })
         _replaced.tryEmit(books.mapTo(HashSet()) { it.id })
+    }
+
+    fun roots(): List<String> = settings.value.roots
+
+    /** Places that came from the server. A paused book in the player goes there too. */
+    fun adoptRemote(places: List<Progress>) {
+        _progress.update { all -> all + places.associateBy { it.bookId } }
+        persistProgress()
+        share(places.map { it.bookId })
+        _replaced.tryEmit(places.mapTo(HashSet()) { it.bookId })
+    }
+
+    /** A bookmark made on another device. */
+    fun addSyncedBookmark(bookId: String, positionMs: Long, note: String, created: Long): Long {
+        val id = maxOf(System.currentTimeMillis(), (_bookmarks.value.maxOfOrNull { it.id } ?: 0) + 1)
+        _bookmarks.update { it + Bookmark(id, bookId, positionMs, note.trim(), created) }
+        persistBookmarks()
+        return id
     }
 
     fun addBookmark(bookId: String, positionMs: Long, note: String): Long {

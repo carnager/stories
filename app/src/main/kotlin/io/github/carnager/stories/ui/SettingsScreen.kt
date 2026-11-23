@@ -166,6 +166,8 @@ fun SettingsScreen(app: App, onClose: () -> Unit) {
                 }
             }
 
+            ServerSection(app)
+
             SectionLabel("Your listening")
             Toggle(
                 "Keep places in the book folders",
@@ -209,6 +211,7 @@ private fun Toggle(title: String, detail: String, value: Boolean, onChange: (Boo
 @Composable
 fun SetupScreen(app: App, storageGranted: Boolean) {
     val context = LocalContext.current
+    var connecting by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val path = uri?.let(::treeToPath) ?: return@rememberLauncherForActivityResult
         app.settings.update { it.copy(roots = listOf(path)) }
@@ -247,8 +250,13 @@ fun SetupScreen(app: App, storageGranted: Boolean) {
                     }
                 }
             }
+            Spacer(Modifier.height(32.dp))
+            Text("Your books are on a storiesd server?", style = MaterialTheme.typography.bodyMedium, color = LocalTones.current.secondary)
+            Spacer(Modifier.height(10.dp))
+            Pill("Connect to a server", null, onClick = { connecting = true })
         }
     }
+    if (connecting) ConnectDialog(app, "", onClose = { connecting = false })
 }
 
 @Composable

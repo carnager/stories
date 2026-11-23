@@ -42,6 +42,8 @@ fun startJoining(app: App, nav: Nav, book: Book) {
  */
 @Composable
 fun BookMenu(app: App, nav: Nav, book: Book) {
+    // A server's books are shaped and named on the server.
+    if (book.onServer) return
     var open by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     Box {

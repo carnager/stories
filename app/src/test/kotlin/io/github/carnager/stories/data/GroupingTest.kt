@@ -122,6 +122,30 @@ class GroupingTest {
     }
 
     @Test
+    fun `a book from discs finds its cover in its parent or disc folders`() {
+        val discs = Grouping.group(listOf(f("/A/Book/CD2/01.mp3", "Book", 1, 2), f("/A/Book/CD1/01.mp3", "Book", 1, 1)))
+        assertEquals(listOf("/A/Book", "/A/Book/CD1", "/A/Book/CD2"), Grouping.coverFolders(discs.single(), discs))
+    }
+
+    @Test
+    fun `only a folder that is the book's alone gives a cover`() {
+        val plain = Grouping.group(listOf(f("/A/Plain/01.mp3")))
+        assertEquals(listOf("/A/Plain"), Grouping.coverFolders(plain.single(), plain))
+        val loose = Grouping.group(listOf(f("/A/one.m4b"), f("/A/two.m4b")))
+        assertEquals(emptyList<String>(), Grouping.coverFolders(loose.first(), loose))
+        val split = Grouping.group(listOf(f("/A/M/a1.mp3", "One"), f("/A/M/a2.mp3", "One"), f("/A/M/b1.mp3", "Two"), f("/A/M/b2.mp3", "Two")))
+        assertEquals(emptyList<String>(), Grouping.coverFolders(split.first(), split))
+    }
+
+    @Test
+    fun `a book joined by hand does not take its series folder's cover`() {
+        val files = listOf(f("/A/S/Part one/1.mp3"), f("/A/S/Part two/1.mp3"), f("/A/S/Other/1.mp3"))
+        val ids = setOf("/A/S/Part one#", "/A/S/Part two#")
+        val drafts = Grouping.group(files, Overrides(merges = mapOf(Grouping.mergeKey(ids) to ids)))
+        assertEquals(emptyList<String>(), Grouping.coverFolders(drafts.single { it.files.size == 2 }, drafts))
+    }
+
+    @Test
     fun `common folder`() {
         assertEquals("/A/S", Grouping.commonFolder(listOf("/A/S/x", "/A/S/y/z")))
         assertEquals("/A/S/x", Grouping.commonFolder(listOf("/A/S/x", "/A/S/x")))

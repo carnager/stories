@@ -17,6 +17,7 @@ import androidx.media3.session.SessionToken
 import io.github.carnager.stories.data.Book
 import io.github.carnager.stories.data.Library
 import io.github.carnager.stories.data.Progress
+import io.github.carnager.stories.data.Remote
 import io.github.carnager.stories.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -45,8 +46,10 @@ class Playback(
     private val library: Library,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
+    private val remote: Remote,
 ) {
     val exo: ExoPlayer = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(remote.mediaSources(context))
         .setAudioAttributes(
             AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
             true,
@@ -154,7 +157,7 @@ class Playback(
         return book.tracks.mapIndexed { i, track ->
             MediaItem.Builder()
                 .setMediaId("${book.id}/$i")
-                .setUri(Uri.fromFile(File(track.path)))
+                .setUri(remote.uri(track) ?: Uri.fromFile(File(track.path)))
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(book.title)
@@ -212,6 +215,17 @@ class Playback(
         }
         connect()
         player.play()
+    }
+
+    /** The book just begun was left further on elsewhere: on from there, without stopping. */
+    fun follow(bookId: String) {
+        val b = book?.takeIf { it.id == bookId } ?: return
+        val p = library.progress.value[bookId] ?: return
+        ended = false
+        val (index, offset) = b.locate(if (p.finished) 0 else p.positionMs)
+        exo.seekTo(index, offset)
+        exo.setPlaybackSpeed(p.speed)
+        _state.update { it.copy(speed = p.speed) }
     }
 
     /** Lets go of the book: stopped, emptied, nothing kept -- it is being deleted. */
