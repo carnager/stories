@@ -22,8 +22,13 @@ a folder of books is a series.
   bookmarks, widget, Android Auto.
 - Optional: delete books from the phone, with their covers and
   position files.
+- Optional: connect to [storiesd](https://github.com/carnager/storiesd) on
+  your computer or home server to sync positions and bookmarks, stream its
+  books, or keep them on the phone. There's also a
+  [desktop app](https://github.com/carnager/stories-desktop). Without a
+  server, Stories works on its own and sends nothing.
 
-Needs Android 11+ and all-files access.
+Needs Android 11+. All-files access is only needed for local folders.
 
 ## Build
 
